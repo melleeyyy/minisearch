@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="ml">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ q }} — MiniSearch</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans Malayalam', 'Manjari', system-ui, sans-serif;
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
          background: #fff; color: #202124; }
   .top { border-bottom: 1px solid #ebebeb; padding: 14px 28px;
          display: flex; align-items: center; gap: 26px; }
-  .logo { font-size: 24px; font-weight: 700; }
+  .logo { font-size: 24px; font-weight: 700; font-family: Arial, system-ui, sans-serif; }
   .logo .a { color: #4285F4; } .logo .b { color: #EA4335; }
   .logo .c { color: #FBBC05; } .logo .d { color: #4285F4; }
   .logo .e { color: #34A853; } .logo .f { color: #EA4335; }
@@ -43,7 +43,7 @@
     </div>
   </form>
 </div>
-<div class="stat">{{ n_docs }} പേജുകളിൽ നിന്ന് — {{ results|length }} ഫലങ്ങൾ</div>
+<div class="stat">{{ n_docs }} indexed pages — {{ results|length }} results</div>
 {% if results %}
 <div class="results">
   {% for r in results %}
@@ -56,7 +56,7 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="empty">ക്വറിക്ക് ഫലങ്ങൾ ഒന്നുമില്ല — വേറെ വാക്ക് ഉപയോഗിച്ച് ശ്രമിക്കുക.</div>
+<div class="empty">No results found — try a different word.</div>
 {% endif %}
 </body>
 </html>

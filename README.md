@@ -1,89 +1,96 @@
-# MiniSearch — നിങ്ങളുടെ സ്വന്തമായ ചെറിയ Search Engine
+# MiniSearch — a tiny but real search engine
 
 **Live site:** https://melleeyyy.github.io/minisearch/
 **Repo:** https://github.com/melleeyyy/minisearch
 
-ഓരോ main-ലേക്കുള്ള push-ഉം GitHub Actions വഴി വീണ്ടും crawl → index → build →
-deploy നടത്തുന്നതിനാൽ site-ലെ data എപ്പോഴും പുതിയതായിരിക്കും.
+MiniSearch has two search modes:
 
-Google-ന്റെ അതേ അടിസ്ഥാന ആശയങ്ങൾ ഉപയോഗിക്കുന്ന, യഥാർത്ഥത്തിൽ പ്രവർത്തിക്കുന്ന
-ഒരു ചെറിയ search engine: **crawler → indexer → search UI**.
+1. **Web** (default) — live full-corpus search across several Wikipedia language
+   editions (English, Malayalam, Hindi, Tamil — ~65 million articles combined)
+   via the MediaWiki API. Results come back in real time; no API key required.
+2. **My index** — our own crawler + inverted index + BM25 ranking, running fully
+   in your browser over the pages in `data/`.
 
-## എങ്ങനെ പ്രവർത്തിക്കുന്നു (Architecture)
+Every push to `main` triggers a GitHub Actions workflow that re-crawls the seed
+sites, rebuilds the index and redeploys the site, so the indexed data always
+stays fresh.
+
+## How it works (architecture)
 
 ```
 seeds.txt ──> crawler.py ──> data/pages.jsonl ──> indexer.py ──> data/index.json
                                                           (BM25 ranking)
                                     search.py (CLI)  <────┘
-                                    app.py    (Web UI - http://localhost:5000)
+                                    app.py    (local web UI - http://localhost:5000)
+
+Web tab ──> MediaWiki search API (live, 4 languages)   [runs in the browser]
+Index tab ──> docs/data/search-data.json (BM25 in JS)   [runs in the browser]
 ```
 
-1. **crawler.py** — `seeds.txt`-ൽ നിന്ന് തുടങ്ങി, ഓരോ page-ും download ചെയ്ത്
-   title, text, links എടുക്കുന്നു. robots.txt അനുസരിക്കുന്നു, ഓരോ request-നും
-   ഇടയിൽ 1 സെക്കൻഡ് കാത്തുന്നു (websites-നെ ബുദ്ധിമുട്ടിക്കാതിരിക്കാൻ).
-2. **indexer.py** — ഓരോ page-ന്റെയും വാക്കുകൾ എണ്ണി, ഒരു **inverted index**
-   (ഓരോ വാക്കിനും ഏതൊക്കെ page-ലാണ് വരുന്നത് എന്ന പട്ടിക) ഉണ്ടാക്കുന്നു.
-3. **BM25 ranking** — Google-ൻ്റെ ആദ്യകാല ranking-ൽ ഉപയോഗിച്ചിരുന്ന
-   TF-IDF-ന്റെ മെച്ചപ്പെടുത്തിയ പതിപ്പ്. ഇതാണ് ഏത് result ആണ് മുകളിൽ
-   കാണിക്കണം എന്ന് തീരുമാനിക്കുന്നത്.
-4. **app.py** — Google-ന് സമാനമായ ഒരു web UI (Flask). Query box + result snippets
-   + highlight ചെയ്ത വാക്കുകൾ.
+1. **crawler.py** — starts from the URLs in `seeds.txt`, downloads each page,
+   extracts title, text and links. Respects robots.txt and waits 1 second
+   between requests (to stay polite).
+2. **indexer.py** — tokenizes each page and builds an **inverted index**
+   (word → which pages contain it). Malayalam vowel signs are kept inside
+   words so words like "കേരളം" tokenize correctly.
+3. **BM25 ranking** — the improved successor of TF-IDF, the same family of
+   scoring Google's early ranking used, decides which results go on top.
+4. **Web mode** — queries the MediaWiki API of four Wikipedia editions in
+   parallel and interleaves the results.
 
-## എങ്ങനെ run ചെയ്യാം
+## How to run locally
 
 ```bash
 pip install requests beautifulsoup4 flask
 
-# 1. Crawl (ഏത് websites എന്ന് seeds.txt-ൽ മാറ്റാം)
-python crawler.py seeds.txt 30        # 30 = എത്ര pages വരെ
+# 1. Crawl (edit seeds.txt to choose which sites to index)
+python crawler.py seeds.txt 30        # 30 = max pages
 
-# 2. Index build ചെയ്യുക
+# 2. Build the index
 python indexer.py
 
-# 3. Search — രണ്ട് വഴികൾ:
-python search.py കേരളം               # command line
-python app.py                        # web UI → http://localhost:5000
+# 3. Search — two ways:
+python search.py kerala               # command line
+python app.py                         # web UI → http://localhost:5000
 ```
 
-## മികച്ച രീതിയിൽ പ്രവർത്തിക്കാൻ
+## Tips
 
-- `seeds.txt`-ൽ നിങ്ങൾക്കിഷ്ടമുള്ള websites ചേർക്കുക (ഓരോ വരിയിലും ഒരു URL).
-  Crawler ആ കിട്ടിയ domains-ൽ മാത്രം നിൽക്കും.
-- Page count കൂട്ടുക: `python crawler.py seeds.txt 200`
-- `MAX_DEPTH` (crawler.py) കൂട്ടിയാൽ link-കൾ പിന്തുടർന്ന് കൂടുതൽ pages
-  കിട്ടും — പക്ഷേ സമയം കൂടും.
+- Add your favourite websites to `seeds.txt` (one URL per line). The crawler
+  stays on those domains only.
+- Crawl more pages: `python crawler.py seeds.txt 200`
+- Raise `MAX_DEPTH` (in crawler.py) to follow more links — it takes longer.
 
-## Google-ൽ നിന്ന് എന്ത് വ്യത്യാസം?
+## How is this different from Google?
 
 | | MiniSearch | Google |
 |---|---|---|
-| Pages | നൂറുകണക്കിന് | നൂറ് ബില്ല്യൺ+ |
-| Ranking | BM25 (വാക്കിന്റെ എണ്ണം മാത്രം) | ML models + PageRank + നൂറുകണക്കിന് signals |
-| Crawl | നിങ്ങൾ കൊടുക്കുന്ന sites മാത്രം | മുഴുവൻ internet, തുടർച്ചയായി |
-| Infrastructure | ഒരു laptop | ലക്ഷക്കണക്കിന് servers |
+| Web results | ~65M Wikipedia articles (live API) | Hundreds of billions of pages |
+| Ranking | BM25 (word counts only) | ML models + PageRank + hundreds of signals |
+| Crawling | The seed sites you choose | The whole web, continuously |
+| Infrastructure | A laptop / free GitHub Actions | Hundreds of thousands of servers |
 
-## Next steps (business experiment ആയെങ്കിൽ ആലോചിക്കാവുന്നവ)
+## Next steps (ideas for a business experiment)
 
-- **Spelling correction** — Levenshtein distance കൊണ്ട് "കേരളം" vs "കേരലം" പിടിക്കുക
-- **Malayalam stemmer** — വാക്കിന്റെ endings (cases, suffixes) നീക്കി matching മെച്ചപ്പെടുത്തുക
-- **TF-IDF vector search + semantic embeddings** — അർത്ഥം അനുസരിച്ചുള്ള തിരച്ചിൽ
-- **Distributed crawl** — ഒന്നിലധികം machines-ൽ ഒരേസമയം crawl ചെയ്യുക
-- robots.txt കൂടുതർ കൃത്യമായി honor ചെയ്യാൻ crawl-delay-യും പാലിക്കുക
+- **Spelling correction** — Levenshtein distance to catch typos
+- **Malayalam stemmer** — strip endings (case suffixes) for better matching
+- **TF-IDF vector search + semantic embeddings** — meaning-based search
+- **Distributed crawl** — crawl from several machines in parallel
+- Honor `Crawl-delay` in robots.txt more strictly
 
 ## Files
 
-| File | എന്ത് ചെയ്യുന്നു |
+| File | What it does |
 |---|---|
-| `crawler.py` | Websites crawl ചെയ്ത് pages.jsonl ഉണ്ടാക്കുന്നു |
-| `indexer.py` | Inverted index + BM25 ranking |
+| `crawler.py` | Crawls websites into pages.jsonl |
+| `indexer.py` | Builds the inverted index + BM25 |
 | `search.py` | Command-line search |
 | `app.py` | Local web UI (Flask) |
-| `build_static.py` | docs/data/search-data.json build ചെയ്യുന്നു |
-| `docs/` | GitHub Pages-ൽ live ആയി പ്രവർത്തിക്കുന്ന static site (browser-ൽ BM25) |
+| `build_static.py` | Builds docs/data/search-data.json |
+| `docs/` | The static site served on GitHub Pages (web + index tabs) |
 | `.github/workflows/deploy.yml` | Crawl → index → build → deploy (GitHub Actions) |
-| `seeds.txt` | എവിടന്ന് crawl തുടങ്ങണം എന്ന URLs |
-| `data/` | Crawl ചെയ്ത pages-ഉം index-ഉം |
+| `seeds.txt` | Where the crawl starts |
+| `data/` | Crawled pages and the built index |
 
-**Note:** ഇത് വിദ്യാഭ്യാസ ആവശ്യത്തിനുള്ളതാണ്. Crawl ചെയ്യുന്ന websites-ന്റെ
-robots.txt-ഉം terms-ഉം അനുസരിക്കുക; വലിയ scale-ൽ crawl ചെയ്യാൻ API ഉപയോഗിക്കുന്നതാണ്
-നല്ലത്.
+**Note:** This is an educational project. Respect the robots.txt and terms of
+the sites you crawl; for large-scale crawling prefer official APIs.

@@ -1,17 +1,18 @@
 <!DOCTYPE html>
-<html lang="ml">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MiniSearch — ചെറിയ തിരച്ചിൽ യന്ത്രം</title>
+<title>MiniSearch — a tiny but real search engine</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans Malayalam', 'Manjari', system-ui, sans-serif;
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
          background: #fff; color: #202124; min-height: 100vh;
          display: flex; flex-direction: column; }
   .center { flex: 1; display: flex; flex-direction: column; align-items: center;
             justify-content: center; padding: 20px; }
-  .logo { font-size: 56px; font-weight: 700; letter-spacing: -2px; margin-bottom: 24px; }
+  .logo { font-size: 56px; font-weight: 700; letter-spacing: -2px; margin-bottom: 24px;
+          font-family: Arial, system-ui, sans-serif; }
   .logo .a { color: #4285F4; } .logo .b { color: #EA4335; }
   .logo .c { color: #FBBC05; } .logo .d { color: #4285F4; }
   .logo .e { color: #34A853; } .logo .f { color: #EA4335; }
@@ -30,14 +31,23 @@
   .foot a:hover { text-decoration: underline; }
 
   /* ---- results mode ---- */
-  body.results .center { flex: none; padding: 26px 0 16px; }
+  body.results .center { flex: none; padding: 24px 0 12px; }
   body.results .logo { font-size: 30px; margin-bottom: 0; }
   body.results form { max-width: 580px; margin: 14px auto 0; }
-  .stat { color: #70757a; font-size: 13px; padding: 6px 30px; max-width: 640px; }
+  .tabs { display: flex; gap: 4px; max-width: 640px; margin: 14px auto 0;
+          padding: 0 30px; }
+  .tab { border: none; background: none; padding: 8px 14px; font-size: 14px;
+         color: #5f6368; cursor: pointer; border-bottom: 3px solid transparent; }
+  .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: 500; }
+  .stat { color: #70757a; font-size: 13px; padding: 6px 30px; max-width: 640px;
+          margin: 0 auto; }
   .results-list { max-width: 640px; padding: 8px 30px 40px; margin: 0 auto; width: 100%; }
   .result { margin-bottom: 26px; }
-  .url { color: #202124; font-size: 13px; margin-bottom: 2px;
-         max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .src { color: #5f6368; font-size: 12px; margin-bottom: 2px; display: flex;
+         align-items: center; gap: 6px; max-width: 100%; overflow: hidden;
+         text-overflow: ellipsis; white-space: nowrap; }
+  .badge { background: #f1f3f4; border-radius: 4px; padding: 1px 6px;
+           font-size: 11px; color: #5f6368; }
   h3 a { color: #1a0dab; font-size: 19px; text-decoration: none; font-weight: 400; }
   h3 a:hover { text-decoration: underline; }
   p { color: #4d5156; font-size: 14px; line-height: 1.58; margin-top: 4px; }
@@ -51,20 +61,47 @@
   <div class="logo"><span class="a">M</span><span class="b">i</span><span class="c">n</span><span class="d">i</span><span class="e">S</span><span class="f">search</span></div>
   <form id="sf" action="#" method="get" autocomplete="off">
     <div class="box">
-      <input type="text" id="q" name="q" placeholder="MiniSearch-ൽ തിരയുക…" autofocus>
-      <button type="submit" title="തിരയുക">🔍</button>
+      <input type="text" id="q" name="q" placeholder="Search the web…" autofocus>
+      <button type="submit" title="Search">🔍</button>
     </div>
   </form>
-  <div class="status" id="status">Index ലോഡ് ചെയ്യുന്നു…</div>
+  <div class="status" id="status"></div>
   <div class="meta" id="meta"></div>
+</div>
+<div id="tabsbar" class="tabs" hidden>
+  <button class="tab active" id="tab-web" onclick="switchTab('web')">Web</button>
+  <button class="tab" id="tab-index" onclick="switchTab('index')">My index</button>
 </div>
 <div id="stat" class="stat" hidden></div>
 <div id="results" class="results-list" hidden></div>
-<div class="foot">MiniSearch — വിദ്യാഭ്യാസ ആവശ്യത്തിനുള്ള ഒരു ചെറിയ search engine ·
-  <a href="https://github.com/melleeyyy/minisearch" id="repo-link">GitHub</a> · BM25 ranking, browser-ൽ പ്രവർത്തിക്കുന്നു</div>
+<div class="foot">MiniSearch — a tiny but real search engine (educational project) ·
+  <a href="https://github.com/melleeyyy/minisearch">GitHub</a> ·
+  Web: live MediaWiki search across 4 languages · Index: BM25 ranking in your browser</div>
 
 <script>
-// ---------- BM25 search, fully in the browser ----------
+// ================= MiniSearch =================
+// Two modes:
+//   "web"   — live full-corpus search across several Wikipedia language
+//             editions (~65M articles) via the MediaWiki API (no key needed)
+//   "index" — BM25 over our own crawled pages, running fully in the browser
+
+let TAB = "web";
+let CURRENT_Q = "";
+let INDEX_DATA = null;
+
+// ---------- shared helpers ----------
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function setStat(text) {
+  document.getElementById("stat").hidden = false;
+  document.getElementById("stat").textContent = text;
+}
+
+// ---------- BM25 (our own index) ----------
 const STOPWORDS = new Set(["ഒരു","ഈ","ആ","അത്","ഇത്","അവർ","ന്റെ","യും","ആണ്","ഉണ്ട്",
   "ചെയ്ത","വേണം","കൊണ്ട്","എന്ന","മറ്റ്","വളരെ","പിന്നീട്","ഇവിടെ",
   "the","a","an","of","and","in","to","is","are","was","for","on","with","as","by",
@@ -82,21 +119,22 @@ function tokenize(text) {
 }
 
 const K1 = 1.5, B = 0.75;
-let DATA = null;
 
 async function loadIndex() {
-  const res = await fetch("data/search-data.json");
-  DATA = await res.json();
-  document.getElementById("status").textContent = "";
-  document.getElementById("meta").textContent =
-    DATA.N + " പേജുകൾ index ചെയ്തിരിക്കുന്നു · " +
-    Object.keys(DATA.postings).length + " വാക്കുകൾ · BM25 ranking";
+  if (INDEX_DATA) return INDEX_DATA;
+  try {
+    const res = await fetch("data/search-data.json");
+    INDEX_DATA = await res.json();
+  } catch (e) {
+    INDEX_DATA = null;
+  }
+  return INDEX_DATA;
 }
 
 function bm25Search(query, topK = 10) {
   const qtoks = tokenize(query);
-  if (!qtoks.length) return [];
-  const { N, avgdl, docs, postings } = DATA;
+  if (!qtoks.length || !INDEX_DATA) return [];
+  const { N, avgdl, docs, postings } = INDEX_DATA;
   const dl = avgdl || 1;
   const scores = {};
   for (const term of qtoks) {
@@ -110,12 +148,6 @@ function bm25Search(query, topK = 10) {
     }
   }
   return Object.entries(scores).sort((a, b) => b[1] - a[1]).slice(0, topK);
-}
-
-function esc(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
 }
 
 function snippet(text, qtoks, width = 260) {
@@ -132,37 +164,119 @@ function snippet(text, qtoks, width = 260) {
   return esc(snip).replace(pat, "<b>$1</b>");
 }
 
-function showResults(q) {
-  document.body.classList.add("results");
-  const qtoks = tokenize(q);
-  const ranked = DATA ? bm25Search(q) : [];
-  const stat = document.getElementById("stat");
-  const box = document.getElementById("results");
-  stat.hidden = false; box.hidden = false;
-  stat.textContent = DATA.N + " പേജുകളിൽ നിന്ന് — " + ranked.length + " ഫലങ്ങൾ";
-  box.innerHTML = "";
-  if (!ranked.length) {
-    box.innerHTML = '<div class="empty">ക്വറിക്ക് ഫലങ്ങൾ ഒന്നുമില്ല — വേറെ വാക്ക് ഉപയോഗിച്ച് ശ്രമിക്കുക.</div>';
-    return;
+// ---------- live web search (MediaWiki API) ----------
+const WIKIS = [
+  { lang: "en", label: "en" },
+  { lang: "ml", label: "ml" },
+  { lang: "hi", label: "hi" },
+  { lang: "ta", label: "ta" },
+];
+
+async function wikiSearch(lang, q, limit) {
+  const url = "https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search" +
+    "&srsearch=" + encodeURIComponent(q) + "&srlimit=" + limit +
+    "&format=json&origin=*";
+  const res = await fetch(url);
+  const data = await res.json();
+  return (data.query && data.query.search ? data.query.search : []).map(r => ({
+    title: r.title,
+    // MediaWiki returns a snippet with <span class="searchmatch"> around hits
+    snippet: (r.snippet || "").replace(/<span class="searchmatch">/g, "<b>")
+                               .replace(/<\/span>/g, "</b>"),
+    url: "https://" + lang + ".wikipedia.org/wiki/" +
+         encodeURIComponent(r.title.replace(/ /g, "_")),
+    lang: lang,
+    words: r.wordcount,
+  }));
+}
+
+async function webSearch(q) {
+  const perWiki = 4;
+  const lists = await Promise.allSettled(
+    WIKIS.map(w => wikiSearch(w.lang, q, perWiki)));
+  // interleave results round-robin so every language gets seen
+  const out = [];
+  for (let i = 0; i < perWiki; i++) {
+    for (const r of lists) {
+      if (r.status === "fulfilled" && r.value[i]) out.push(r.value[i]);
+    }
   }
-  for (const [url, score] of ranked) {
-    const pg = DATA.pages[url] || { title: url, text: "" };
+  return out;
+}
+
+// ---------- rendering ----------
+function renderWeb(results) {
+  const box = document.getElementById("results");
+  box.innerHTML = "";
+  for (const r of results) {
     const div = document.createElement("div");
     div.className = "result";
     div.innerHTML =
-      '<div class="url">' + esc(url) + "</div>" +
-      '<h3><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(pg.title) + "</a></h3>" +
+      '<div class="src"><span class="badge">' + r.lang + "</span> " +
+      esc(r.url) + "</div>" +
+      '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+      esc(r.title) + "</a></h3>" +
+      "<p>" + r.snippet + "…</p>";
+    box.appendChild(div);
+  }
+}
+
+function renderIndex(results, qtoks) {
+  const box = document.getElementById("results");
+  box.innerHTML = "";
+  for (const [url, score] of results) {
+    const pg = INDEX_DATA.pages[url] || { title: url, text: "" };
+    const div = document.createElement("div");
+    div.className = "result";
+    div.innerHTML =
+      '<div class="src"><span class="badge">index</span> ' + esc(url) + "</div>" +
+      '<h3><a href="' + esc(url) + '" target="_blank" rel="noopener">' +
+      esc(pg.title) + "</a></h3>" +
       "<p>" + snippet(pg.text, qtoks) + "</p>" +
       '<span class="score">BM25 score: ' + score.toFixed(2) + "</span>";
     box.appendChild(div);
   }
 }
 
+async function runSearch(q, tab) {
+  CURRENT_Q = q;
+  document.body.classList.add("results");
+  document.getElementById("tabsbar").hidden = false;
+  const box = document.getElementById("results");
+  box.hidden = false;
+  setStat("Searching…");
+
+  if (tab === "web") {
+    const results = await webSearch(q);
+    if (q !== CURRENT_Q) return;  // a newer query started
+    renderWeb(results);
+    setStat(results.length + " web results for “" + q + "”");
+  } else {
+    await loadIndex();
+    const results = INDEX_DATA ? bm25Search(q) : [];
+    renderIndex(results, tokenize(q));
+    setStat(INDEX_DATA
+      ? INDEX_DATA.N + " indexed pages — " + results.length + " results for “" + q + "”"
+      : "Index unavailable (run crawler + indexer + build_static first)");
+  }
+}
+
+function switchTab(tab) {
+  TAB = tab;
+  document.getElementById("tab-web").classList.toggle("active", tab === "web");
+  document.getElementById("tab-index").classList.toggle("active", tab === "index");
+  if (CURRENT_Q) runSearch(CURRENT_Q, TAB);
+  if (history.replaceState)
+    history.replaceState(null, "", "?q=" + encodeURIComponent(CURRENT_Q) +
+                             "&t=" + tab);
+}
+
 function go(q) {
   if (!q) return;
   document.getElementById("q").value = q;
-  history.replaceState(null, "", "?q=" + encodeURIComponent(q));
-  if (DATA) showResults(q);
+  if (history.replaceState)
+    history.replaceState(null, "", "?q=" + encodeURIComponent(q) + "&t=" + TAB);
+  runSearch(q, TAB);
 }
 
 document.getElementById("sf").addEventListener("submit", (e) => {
@@ -170,11 +284,28 @@ document.getElementById("sf").addEventListener("submit", (e) => {
   go(document.getElementById("q").value.trim());
 });
 
-const params = new URLSearchParams(location.search);
-loadIndex().then(() => {
+// ---------- startup ----------
+(async () => {
+  // preload our index in the background; the web tab does not need it
+  const idx = loadIndex();
+  const meta = document.getElementById("meta");
+  const data = await idx.catch(() => null);
+  if (data) {
+    meta.textContent = data.N + " pages crawled and indexed · " +
+      Object.keys(data.postings).length + " terms · BM25 ranking";
+  } else {
+    meta.textContent = "Live web search powered by the MediaWiki API";
+  }
+  const params = new URLSearchParams(location.search);
   const q = params.get("q");
+  const t = params.get("t");
+  if (t === "index") {
+    TAB = "index";
+    document.getElementById("tab-web").classList.remove("active");
+    document.getElementById("tab-index").classList.add("active");
+  }
   if (q) go(q);
-});
+})();
 </script>
 </body>
 </html>

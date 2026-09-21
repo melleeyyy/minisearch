@@ -1,16 +1,17 @@
 <!DOCTYPE html>
-<html lang="ml">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MiniSearch</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Noto Sans Malayalam', 'Manjari', system-ui, sans-serif;
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
          background: #fff; color: #202124; }
   .center { min-height: 92vh; display: flex; flex-direction: column;
             align-items: center; justify-content: center; }
-  .logo { font-size: 64px; font-weight: 700; letter-spacing: -2px; margin-bottom: 28px; }
+  .logo { font-size: 64px; font-weight: 700; letter-spacing: -2px; margin-bottom: 28px;
+          font-family: Arial, system-ui, sans-serif; }
   .logo .a { color: #4285F4; } .logo .b { color: #EA4335; }
   .logo .c { color: #FBBC05; } .logo .d { color: #4285F4; }
   .logo .e { color: #34A853; } .logo .f { color: #EA4335; }
@@ -31,12 +32,12 @@
   <div class="logo"><span class="a">M</span><span class="b">i</span><span class="c">n</span><span class="d">i</span><span class="e">S</span><span class="f">earch</span></div>
   <form action="/search" method="get">
     <div class="box">
-      <input type="text" name="q" placeholder="MiniSearch-ൽ തിരയുക…" autofocus>
-      <button type="submit" title="തിരയുക">🔍</button>
+      <input type="text" name="q" placeholder="Search MiniSearch…" autofocus>
+      <button type="submit" title="Search">🔍</button>
     </div>
   </form>
-  <div class="meta">{{ n_docs }} പേജുകൾ index ചെയ്തിരിക്കുന്നു · {{ n_terms }} വാക്കുകൾ · BM25 ranking</div>
+  <div class="meta">{{ n_docs }} pages indexed · {{ n_terms }} terms · BM25 ranking</div>
 </div>
-<div class="foot">MiniSearch — വിദ്യാഭ്യാസ ആവശ്യത്തിനുള്ള ഒരു ചെറിയ search engine</div>
+<div class="foot">MiniSearch — a tiny but real search engine (educational project)</div>
 </body>
 </html>
