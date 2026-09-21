@@ -70,7 +70,8 @@ const STOPWORDS = new Set(["ഒരു","ഈ","ആ","അത്","ഇത്","അ�
   "the","a","an","of","and","in","to","is","are","was","for","on","with","as","by",
   "that","it","from","or","at","be","this"]);
 
-const TOKEN_RE = /[\p{L}\p{N}]+/gu;
+// \p{M} (combining marks) keeps Malayalam vowel signs inside words
+const TOKEN_RE = /[\p{L}\p{N}\p{M}]+/gu;
 
 function tokenize(text) {
   const out = [];
@@ -112,7 +113,9 @@ function bm25Search(query, topK = 10) {
 }
 
 function esc(s) {
-  return s.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
 }
 
 function snippet(text, qtoks, width = 260) {

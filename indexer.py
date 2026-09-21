@@ -9,7 +9,9 @@ import os
 import re
 from collections import Counter
 
-TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
+# \w alone drops Malayalam combining vowel signs (e.g. the േ in കേരളം),
+# which would split words into fragments — so we include the full Malayalam block.
+TOKEN_RE = re.compile(r"[\w\u0D00-\u0D7F]+", re.UNICODE)
 
 # A few common Malayalam + English stopwords (kept small on purpose)
 STOPWORDS = {
