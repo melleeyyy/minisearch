@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ q }} — MiniSearch</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans Malayalam', 'Manjari', system-ui, sans-serif;
+         background: #fff; color: #202124; }
+  .top { border-bottom: 1px solid #ebebeb; padding: 14px 28px;
+         display: flex; align-items: center; gap: 26px; }
+  .logo { font-size: 24px; font-weight: 700; }
+  .logo .a { color: #4285F4; } .logo .b { color: #EA4335; }
+  .logo .c { color: #FBBC05; } .logo .d { color: #4285F4; }
+  .logo .e { color: #34A853; } .logo .f { color: #EA4335; }
+  form { display: flex; flex: 1; max-width: 600px; }
+  .box { display: flex; flex: 1; align-items: center; border: 1px solid #dfe1e5;
+         border-radius: 22px; padding: 8px 16px; }
+  .box:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28); border-color: transparent; }
+  input[type=text] { flex: 1; border: none; outline: none; font-size: 15px; }
+  button { background: none; border: none; cursor: pointer; font-size: 15px; }
+  .stat { color: #70757a; font-size: 13px; padding: 10px 30px; }
+  .results { max-width: 640px; padding: 8px 30px 40px; }
+  .result { margin-bottom: 26px; }
+  .url { color: #202124; font-size: 13px; margin-bottom: 2px;
+         max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  h3 a { color: #1a0dab; font-size: 19px; text-decoration: none; font-weight: 400; }
+  h3 a:hover { text-decoration: underline; }
+  p { color: #4d5156; font-size: 14px; line-height: 1.58; margin-top: 4px; }
+  p b { font-weight: 700; color: #202124; }
+  .score { color: #70757a; font-size: 11px; }
+  .empty { padding: 60px 30px; color: #70757a; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="logo"><span class="a">M</span><span class="b">i</span><span class="c">n</span><span class="d">i</span><span class="e">S</span><span class="f">earch</span></div>
+  <form action="/search" method="get">
+    <div class="box">
+      <input type="text" name="q" value="{{ q }}">
+      <button type="submit">🔍</button>
+    </div>
+  </form>
+</div>
+<div class="stat">{{ n_docs }} പേജുകളിൽ നിന്ന് — {{ results|length }} ഫലങ്ങൾ</div>
+{% if results %}
+<div class="results">
+  {% for r in results %}
+  <div class="result">
+    <div class="url">{{ r.url }}</div>
+    <h3><a href="{{ r.url }}">{{ r.title }}</a></h3>
+    <p>{{ r.snippet|safe }}</p>
+    <span class="score">BM25 score: {{ r.score }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">ക്വറിക്ക് ഫലങ്ങൾ ഒന്നുമില്ല — വേറെ വാക്ക് ഉപയോഗിച്ച് ശ്രമിക്കുക.</div>
+{% endif %}
+</body>
+</html>

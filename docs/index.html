@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniSearch — ചെറിയ തിരച്ചിൽ യന്ത്രം</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans Malayalam', 'Manjari', system-ui, sans-serif;
+         background: #fff; color: #202124; min-height: 100vh;
+         display: flex; flex-direction: column; }
+  .center { flex: 1; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; padding: 20px; }
+  .logo { font-size: 56px; font-weight: 700; letter-spacing: -2px; margin-bottom: 24px; }
+  .logo .a { color: #4285F4; } .logo .b { color: #EA4335; }
+  .logo .c { color: #FBBC05; } .logo .d { color: #4285F4; }
+  .logo .e { color: #34A853; } .logo .f { color: #EA4335; }
+  form { width: 100%; max-width: 560px; }
+  .box { display: flex; align-items: center; border: 1px solid #dfe1e5;
+         border-radius: 24px; padding: 12px 18px; }
+  .box:hover, .box:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28);
+         border-color: transparent; }
+  input[type=text] { flex: 1; border: none; outline: none; font-size: 17px;
+         background: transparent; }
+  button { background: none; border: none; cursor: pointer; font-size: 17px; }
+  .meta { margin-top: 26px; color: #70757a; font-size: 13px; text-align: center; }
+  .status { margin-top: 10px; font-size: 13px; color: #5f6368; }
+  .foot { background: #f2f2f2; padding: 12px 24px; color: #70757a; font-size: 13px; }
+  .foot a { color: #4285F4; text-decoration: none; }
+  .foot a:hover { text-decoration: underline; }
+
+  /* ---- results mode ---- */
+  body.results .center { flex: none; padding: 26px 0 16px; }
+  body.results .logo { font-size: 30px; margin-bottom: 0; }
+  body.results form { max-width: 580px; margin: 14px auto 0; }
+  .stat { color: #70757a; font-size: 13px; padding: 6px 30px; max-width: 640px; }
+  .results-list { max-width: 640px; padding: 8px 30px 40px; margin: 0 auto; width: 100%; }
+  .result { margin-bottom: 26px; }
+  .url { color: #202124; font-size: 13px; margin-bottom: 2px;
+         max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  h3 a { color: #1a0dab; font-size: 19px; text-decoration: none; font-weight: 400; }
+  h3 a:hover { text-decoration: underline; }
+  p { color: #4d5156; font-size: 14px; line-height: 1.58; margin-top: 4px; }
+  p b { font-weight: 700; color: #202124; }
+  .score { color: #70757a; font-size: 11px; }
+  .empty { padding: 40px 30px; color: #70757a; max-width: 640px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<div class="center">
+  <div class="logo"><span class="a">M</span><span class="b">i</span><span class="c">n</span><span class="d">i</span><span class="e">S</span><span class="f">search</span></div>
+  <form id="sf" action="#" method="get" autocomplete="off">
+    <div class="box">
+      <input type="text" id="q" name="q" placeholder="MiniSearch-ൽ തിരയുക…" autofocus>
+      <button type="submit" title="തിരയുക">🔍</button>
+    </div>
+  </form>
+  <div class="status" id="status">Index ലോഡ് ചെയ്യുന്നു…</div>
+  <div class="meta" id="meta"></div>
+</div>
+<div id="stat" class="stat" hidden></div>
+<div id="results" class="results-list" hidden></div>
+<div class="foot">MiniSearch — വിദ്യാഭ്യാസ ആവശ്യത്തിനുള്ള ഒരു ചെറിയ search engine ·
+  <a href="https://github.com/melleeyyy/minisearch" id="repo-link">GitHub</a> · BM25 ranking, browser-ൽ പ്രവർത്തിക്കുന്നു</div>
+
+<script>
+// ---------- BM25 search, fully in the browser ----------
+const STOPWORDS = new Set(["ഒരു","ഈ","ആ","അത്","ഇത്","അവർ","ന്റെ","യും","ആണ്","ഉണ്ട്",
+  "ചെയ്ത","വേണം","കൊണ്ട്","എന്ന","മറ്റ്","വളരെ","പിന്നീട്","ഇവിടെ",
+  "the","a","an","of","and","in","to","is","are","was","for","on","with","as","by",
+  "that","it","from","or","at","be","this"]);
+
+const TOKEN_RE = /[\p{L}\p{N}]+/gu;
+
+function tokenize(text) {
+  const out = [];
+  for (const t of text.toLowerCase().match(TOKEN_RE) || []) {
+    if (t.length > 1 && !STOPWORDS.has(t)) out.push(t);
+  }
+  return out;
+}
+
+const K1 = 1.5, B = 0.75;
+let DATA = null;
+
+async function loadIndex() {
+  const res = await fetch("data/search-data.json");
+  DATA = await res.json();
+  document.getElementById("status").textContent = "";
+  document.getElementById("meta").textContent =
+    DATA.N + " പേജുകൾ index ചെയ്തിരിക്കുന്നു · " +
+    Object.keys(DATA.postings).length + " വാക്കുകൾ · BM25 ranking";
+}
+
+function bm25Search(query, topK = 10) {
+  const qtoks = tokenize(query);
+  if (!qtoks.length) return [];
+  const { N, avgdl, docs, postings } = DATA;
+  const dl = avgdl || 1;
+  const scores = {};
+  for (const term of qtoks) {
+    const plist = postings[term];
+    if (!plist) continue;
+    const idf = Math.log(1 + (N - Object.keys(plist).length + 0.5) /
+                         (Object.keys(plist).length + 0.5));
+    for (const [url, tf] of Object.entries(plist)) {
+      const denom = tf + K1 * (1 - B + B * (docs[url].length / dl));
+      scores[url] = (scores[url] || 0) + idf * (tf * (K1 + 1) / denom);
+    }
+  }
+  return Object.entries(scores).sort((a, b) => b[1] - a[1]).slice(0, topK);
+}
+
+function esc(s) {
+  return s.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">");
+}
+
+function snippet(text, qtoks, width = 260) {
+  const lower = text.toLowerCase();
+  let pos = -1;
+  for (const t of qtoks) { pos = lower.indexOf(t); if (pos >= 0) break; }
+  if (pos < 0) return esc(text.slice(0, width));
+  let start = Math.max(0, pos - Math.floor(width / 3));
+  let snip = text.slice(start, start + width);
+  if (start > 0) snip = "…" + snip;
+  if (start + width < text.length) snip += "…";
+  const pat = new RegExp("(" + qtoks.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+                                 .join("|") + ")", "gi");
+  return esc(snip).replace(pat, "<b>$1</b>");
+}
+
+function showResults(q) {
+  document.body.classList.add("results");
+  const qtoks = tokenize(q);
+  const ranked = DATA ? bm25Search(q) : [];
+  const stat = document.getElementById("stat");
+  const box = document.getElementById("results");
+  stat.hidden = false; box.hidden = false;
+  stat.textContent = DATA.N + " പേജുകളിൽ നിന്ന് — " + ranked.length + " ഫലങ്ങൾ";
+  box.innerHTML = "";
+  if (!ranked.length) {
+    box.innerHTML = '<div class="empty">ക്വറിക്ക് ഫലങ്ങൾ ഒന്നുമില്ല — വേറെ വാക്ക് ഉപയോഗിച്ച് ശ്രമിക്കുക.</div>';
+    return;
+  }
+  for (const [url, score] of ranked) {
+    const pg = DATA.pages[url] || { title: url, text: "" };
+    const div = document.createElement("div");
+    div.className = "result";
+    div.innerHTML =
+      '<div class="url">' + esc(url) + "</div>" +
+      '<h3><a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(pg.title) + "</a></h3>" +
+      "<p>" + snippet(pg.text, qtoks) + "</p>" +
+      '<span class="score">BM25 score: ' + score.toFixed(2) + "</span>";
+    box.appendChild(div);
+  }
+}
+
+function go(q) {
+  if (!q) return;
+  document.getElementById("q").value = q;
+  history.replaceState(null, "", "?q=" + encodeURIComponent(q));
+  if (DATA) showResults(q);
+}
+
+document.getElementById("sf").addEventListener("submit", (e) => {
+  e.preventDefault();
+  go(document.getElementById("q").value.trim());
+});
+
+const params = new URLSearchParams(location.search);
+loadIndex().then(() => {
+  const q = params.get("q");
+  if (q) go(q);
+});
+</script>
+</body>
+</html>
