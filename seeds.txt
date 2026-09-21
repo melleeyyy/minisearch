@@ -1,0 +1,12 @@
+# Seed URLs — one per line. The crawler stays on these domains.
+# Malayalam Wikipedia
+https://ml.wikipedia.org/wiki/കേരളം
+https://ml.wikipedia.org/wiki/ഇന്ത്യ
+https://ml.wikipedia.org/wiki/തിരുവനന്തപുരം
+https://ml.wikipedia.org/wiki/കൊച്ചി
+# English Wikipedia
+https://en.wikipedia.org/wiki/Search_engine
+https://en.wikipedia.org/wiki/Google_Search
+https://en.wikipedia.org/wiki/Kerala
+# ISRO
+https://www.isro.gov.in/
