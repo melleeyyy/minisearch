@@ -3,13 +3,22 @@
 **Live site:** https://melleeyyy.github.io/minisearch/
 **Repo:** https://github.com/melleeyyy/minisearch
 
-MiniSearch has two search modes:
+MiniSearch has five search tabs:
 
 1. **Web** (default) — live full-corpus search across several Wikipedia language
    editions (English, Malayalam, Hindi, Tamil — ~65 million articles combined)
    via the MediaWiki API. Results come back in real time; no API key required.
-2. **My index** — our own crawler + inverted index + BM25 ranking, running fully
+2. **Images** — image search over all of Wikimedia Commons (millions of freely
+   licensed images), with a responsive thumbnail grid.
+3. **Videos** — video search over Wikimedia Commons: real playable WebM/OGV
+   files rendered with HTML5 `<video>` players.
+4. **News** — live global news search via the GDELT 2.0 API (keyless, updated
+   every 15 minutes), with an automatic Wikipedia fallback if it is unreachable.
+5. **My index** — our own crawler + inverted index + BM25 ranking, running fully
    in your browser over the pages in `data/`.
+
+Extras: dark mode toggle, loading spinner, timed result counts, keyboard shortcut
+(`/` focuses the search box) and a fully responsive layout.
 
 Every push to `main` triggers a GitHub Actions workflow that re-crawls the seed
 sites, rebuilds the index and redeploys the site, so the indexed data always
@@ -23,8 +32,8 @@ seeds.txt ──> crawler.py ──> data/pages.jsonl ──> indexer.py ──>
                                     search.py (CLI)  <────┘
                                     app.py    (local web UI - http://localhost:5000)
 
-Web tab ──> MediaWiki search API (live, 4 languages)   [runs in the browser]
-Index tab ──> docs/data/search-data.json (BM25 in JS)   [runs in the browser]
+Web / Images / Videos / News tabs ──> live APIs, queried from the browser
+Index tab ──> docs/data/search-data.json (BM25 in JS)
 ```
 
 1. **crawler.py** — starts from the URLs in `seeds.txt`, downloads each page,
@@ -35,8 +44,8 @@ Index tab ──> docs/data/search-data.json (BM25 in JS)   [runs in the browser
    words so words like "കേരളം" tokenize correctly.
 3. **BM25 ranking** — the improved successor of TF-IDF, the same family of
    scoring Google's early ranking used, decides which results go on top.
-4. **Web mode** — queries the MediaWiki API of four Wikipedia editions in
-   parallel and interleaves the results.
+4. **Web / Images / Videos / News modes** — query the MediaWiki and GDELT APIs
+   from the browser and interleave the results.
 
 ## How to run locally
 
@@ -66,6 +75,8 @@ python app.py                         # web UI → http://localhost:5000
 | | MiniSearch | Google |
 |---|---|---|
 | Web results | ~65M Wikipedia articles (live API) | Hundreds of billions of pages |
+| Images / Videos | Wikimedia Commons (freely licensed) | The whole web |
+| News | GDELT (global news, 15-min updates) | Google News |
 | Ranking | BM25 (word counts only) | ML models + PageRank + hundreds of signals |
 | Crawling | The seed sites you choose | The whole web, continuously |
 | Infrastructure | A laptop / free GitHub Actions | Hundreds of thousands of servers |
@@ -87,7 +98,7 @@ python app.py                         # web UI → http://localhost:5000
 | `search.py` | Command-line search |
 | `app.py` | Local web UI (Flask) |
 | `build_static.py` | Builds docs/data/search-data.json |
-| `docs/` | The static site served on GitHub Pages (web + index tabs) |
+| `docs/` | The static site served on GitHub Pages (web, images, videos, news, index tabs) |
 | `.github/workflows/deploy.yml` | Crawl → index → build → deploy (GitHub Actions) |
 | `seeds.txt` | Where the crawl starts |
 | `data/` | Crawled pages and the built index |

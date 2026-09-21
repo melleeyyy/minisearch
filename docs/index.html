@@ -5,100 +5,184 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MiniSearch — a tiny but real search engine</title>
 <style>
+  :root {
+    --bg: #ffffff; --bg-soft: #f6f8fa; --text: #202124; --text-soft: #5f6368;
+    --line: #dfe1e5; --card: #ffffff; --accent: #1a73e8; --link: #1a0dab;
+    --chip: #f1f3f4; --shadow: 0 1px 6px rgba(32,33,36,.15);
+  }
+  body.dark {
+    --bg: #202124; --bg-soft: #171717; --text: #e8eaed; --text-soft: #9aa0a6;
+    --line: #3c4043; --card: #292a2d; --accent: #8ab4f8; --link: #8ab4f8;
+    --chip: #303134; --shadow: 0 1px 6px rgba(0,0,0,.5);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-         background: #fff; color: #202124; min-height: 100vh;
-         display: flex; flex-direction: column; }
+         background: var(--bg); color: var(--text); min-height: 100vh;
+         display: flex; flex-direction: column; transition: background .2s, color .2s; }
+  a { color: inherit; }
+
   .center { flex: 1; display: flex; flex-direction: column; align-items: center;
             justify-content: center; padding: 20px; }
-  .logo { font-size: 56px; font-weight: 700; letter-spacing: -2px; margin-bottom: 24px;
+  .logo { font-size: 58px; font-weight: 700; letter-spacing: -2px; margin-bottom: 26px;
           font-family: Arial, system-ui, sans-serif; }
   .logo .a { color: #4285F4; } .logo .b { color: #EA4335; }
   .logo .c { color: #FBBC05; } .logo .d { color: #4285F4; }
   .logo .e { color: #34A853; } .logo .f { color: #EA4335; }
-  form { width: 100%; max-width: 560px; }
-  .box { display: flex; align-items: center; border: 1px solid #dfe1e5;
-         border-radius: 24px; padding: 12px 18px; }
-  .box:hover, .box:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28);
-         border-color: transparent; }
+  form { width: 100%; max-width: 580px; }
+  .box { display: flex; align-items: center; gap: 8px; background: var(--bg-soft);
+         border: 1px solid var(--line); border-radius: 26px; padding: 12px 18px;
+         transition: box-shadow .15s, background .15s; }
+  body:not(.dark) .box { background: #fff; }
+  body.dark .box { background: #303134; }
+  .box:hover, .box:focus-within { box-shadow: var(--shadow); border-color: transparent; }
   input[type=text] { flex: 1; border: none; outline: none; font-size: 17px;
-         background: transparent; }
-  button { background: none; border: none; cursor: pointer; font-size: 17px; }
-  .meta { margin-top: 26px; color: #70757a; font-size: 13px; text-align: center; }
-  .status { margin-top: 10px; font-size: 13px; color: #5f6368; }
-  .foot { background: #f2f2f2; padding: 12px 24px; color: #70757a; font-size: 13px; }
-  .foot a { color: #4285F4; text-decoration: none; }
+         background: transparent; color: var(--text); }
+  .icon-btn { background: none; border: none; cursor: pointer; font-size: 17px;
+              color: var(--text-soft); padding: 2px 4px; border-radius: 50%; }
+  .icon-btn:hover { background: var(--chip); }
+  .meta { margin-top: 26px; color: var(--text-soft); font-size: 13px; text-align: center;
+          max-width: 560px; }
+  .hint { margin-top: 8px; color: var(--text-soft); font-size: 12px; }
+  .foot { background: var(--bg-soft); padding: 12px 24px; color: var(--text-soft);
+          font-size: 13px; border-top: 1px solid var(--line); display: flex;
+          flex-wrap: wrap; gap: 14px; justify-content: center; }
+  .foot a { color: var(--accent); text-decoration: none; }
   .foot a:hover { text-decoration: underline; }
 
   /* ---- results mode ---- */
-  body.results .center { flex: none; padding: 24px 0 12px; }
+  body.results .center { flex: none; padding: 18px 0 4px; }
   body.results .logo { font-size: 30px; margin-bottom: 0; }
-  body.results form { max-width: 580px; margin: 14px auto 0; }
-  .tabs { display: flex; gap: 4px; max-width: 640px; margin: 14px auto 0;
-          padding: 0 30px; }
-  .tab { border: none; background: none; padding: 8px 14px; font-size: 14px;
-         color: #5f6368; cursor: pointer; border-bottom: 3px solid transparent; }
-  .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; font-weight: 500; }
-  .stat { color: #70757a; font-size: 13px; padding: 6px 30px; max-width: 640px;
-          margin: 0 auto; }
-  .results-list { max-width: 640px; padding: 8px 30px 40px; margin: 0 auto; width: 100%; }
+  body.results form { max-width: 600px; margin: 12px auto 0; }
+  .header2 { position: sticky; top: 0; z-index: 10; background: var(--bg);
+             border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  .tabs { display: flex; gap: 2px; max-width: 640px; margin: 10px auto 0;
+          padding: 0 20px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { border: none; background: none; padding: 9px 13px; font-size: 14px;
+         color: var(--text-soft); cursor: pointer; border-bottom: 3px solid transparent;
+         white-space: nowrap; display: flex; align-items: center; gap: 6px;
+         border-radius: 8px 8px 0 0; }
+  .tab:hover { color: var(--text); background: var(--chip); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+  .theme-toggle { position: absolute; right: 20px; top: 22px; }
+  .stat { color: var(--text-soft); font-size: 13px; padding: 8px 30px 4px;
+          max-width: 640px; margin: 0 auto; }
+  .container { max-width: 640px; padding: 10px 30px 50px; margin: 0 auto; width: 100%; }
+
+  /* web / news results */
   .result { margin-bottom: 26px; }
-  .src { color: #5f6368; font-size: 12px; margin-bottom: 2px; display: flex;
+  .src { color: var(--text-soft); font-size: 12px; margin-bottom: 3px; display: flex;
          align-items: center; gap: 6px; max-width: 100%; overflow: hidden;
          text-overflow: ellipsis; white-space: nowrap; }
-  .badge { background: #f1f3f4; border-radius: 4px; padding: 1px 6px;
-           font-size: 11px; color: #5f6368; }
-  h3 a { color: #1a0dab; font-size: 19px; text-decoration: none; font-weight: 400; }
+  .badge { background: var(--chip); border-radius: 5px; padding: 1px 7px;
+           font-size: 11px; color: var(--text-soft); font-weight: 500; }
+  h3 a { color: var(--link); font-size: 19px; text-decoration: none; font-weight: 400; }
   h3 a:hover { text-decoration: underline; }
-  p { color: #4d5156; font-size: 14px; line-height: 1.58; margin-top: 4px; }
-  p b { font-weight: 700; color: #202124; }
-  .score { color: #70757a; font-size: 11px; }
-  .empty { padding: 40px 30px; color: #70757a; max-width: 640px; margin: 0 auto; }
+  .result p { color: var(--text-soft); font-size: 14px; line-height: 1.58; margin-top: 4px; }
+  .result p b { font-weight: 700; color: var(--text); }
+  .score { color: var(--text-soft); font-size: 11px; }
+
+  /* news cards */
+  .news-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+               padding: 14px 16px; margin-bottom: 12px; transition: box-shadow .15s,
+               transform .15s; }
+  .news-card:hover { box-shadow: var(--shadow); transform: translateY(-1px); }
+  .news-card h3 a { font-size: 16.5px; line-height: 1.35; }
+  .news-meta { color: var(--text-soft); font-size: 12px; margin-top: 6px; display: flex;
+               gap: 10px; flex-wrap: wrap; }
+
+  /* images grid */
+  .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+              gap: 10px; }
+  .img-card { border-radius: 12px; overflow: hidden; background: var(--card);
+              border: 1px solid var(--line); display: block; position: relative; }
+  .img-card img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block;
+                  transition: transform .2s; }
+  .img-card:hover img { transform: scale(1.05); }
+  .img-card .cap { padding: 6px 8px; font-size: 11.5px; color: var(--text-soft);
+                   line-height: 1.3; height: 40px; overflow: hidden; }
+
+  /* video cards */
+  .vid-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+              overflow: hidden; margin-bottom: 18px; }
+  .vid-card video { width: 100%; display: block; background: #000; max-height: 340px; }
+  .vid-card .cap { padding: 10px 14px; display: flex; justify-content: space-between;
+                   gap: 10px; align-items: baseline; }
+  .vid-card .cap a { color: var(--link); text-decoration: none; font-size: 14px;
+                     line-height: 1.35; }
+  .vid-card .cap a:hover { text-decoration: underline; }
+
+  /* empty + loading */
+  .empty { padding: 50px 30px; color: var(--text-soft); text-align: center; }
+  .empty .big { font-size: 38px; margin-bottom: 10px; }
+  .spinner { margin: 44px auto; width: 34px; height: 34px; border-radius: 50%;
+             border: 3px solid var(--chip); border-top-color: var(--accent);
+             animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .note { color: var(--text-soft); font-size: 12.5px; margin: 6px 0 14px; }
 </style>
 </head>
 <body>
-<div class="center">
-  <div class="logo"><span class="a">M</span><span class="b">i</span><span class="c">n</span><span class="d">i</span><span class="e">S</span><span class="f">search</span></div>
-  <form id="sf" action="#" method="get" autocomplete="off">
-    <div class="box">
-      <input type="text" id="q" name="q" placeholder="Search the web…" autofocus>
-      <button type="submit" title="Search">🔍</button>
-    </div>
-  </form>
-  <div class="status" id="status"></div>
-  <div class="meta" id="meta"></div>
-</div>
-<div id="tabsbar" class="tabs" hidden>
-  <button class="tab active" id="tab-web" onclick="switchTab('web')">Web</button>
-  <button class="tab" id="tab-index" onclick="switchTab('index')">My index</button>
+<div class="header2">
+  <div class="center">
+    <div class="logo"><span class="a">M</span><span class="b">i</span><span class="c">n</span><span class="d">i</span><span class="e">S</span><span class="f">search</span></div>
+    <form id="sf" action="#" method="get" autocomplete="off">
+      <div class="box">
+        <input type="text" id="q" name="q" placeholder="Search the web…" autofocus>
+        <button type="submit" class="icon-btn" title="Search">🔍</button>
+      </div>
+    </form>
+    <div class="meta" id="meta">MiniSearch — search the web, images, videos & news</div>
+    <div class="hint" id="hint"></div>
+  </div>
+  <div id="tabsbar" class="tabs" hidden>
+    <button class="tab active" id="tab-web" onclick="switchTab('web')">🌐 Web</button>
+    <button class="tab" id="tab-images" onclick="switchTab('images')">🖼️ Images</button>
+    <button class="tab" id="tab-videos" onclick="switchTab('videos')">🎬 Videos</button>
+    <button class="tab" id="tab-news" onclick="switchTab('news')">📰 News</button>
+    <button class="tab" id="tab-index" onclick="switchTab('index')">🗃️ My index</button>
+  </div>
+  <button class="icon-btn theme-toggle" id="themeBtn" title="Toggle dark mode" onclick="toggleTheme()">🌙</button>
 </div>
 <div id="stat" class="stat" hidden></div>
-<div id="results" class="results-list" hidden></div>
-<div class="foot">MiniSearch — a tiny but real search engine (educational project) ·
-  <a href="https://github.com/melleeyyy/minisearch">GitHub</a> ·
-  Web: live MediaWiki search across 4 languages · Index: BM25 ranking in your browser</div>
+<div id="results" class="container" hidden></div>
+<div class="foot">
+  <span>MiniSearch — a tiny but real search engine (educational project)</span>
+  <a href="https://github.com/melleeyyy/minisearch">GitHub</a>
+  <span>Web & news: live APIs · My index: BM25 in your browser</span>
+</div>
 
 <script>
-// ================= MiniSearch =================
-// Two modes:
-//   "web"   — live full-corpus search across several Wikipedia language
-//             editions (~65M articles) via the MediaWiki API (no key needed)
-//   "index" — BM25 over our own crawled pages, running fully in the browser
+// ================= MiniSearch v3 =================
+// Tabs:
+//   web    — live search across 4 Wikipedia language editions (MediaWiki API)
+//   images — Wikimedia Commons image search (CORS-open, no key)
+//   videos — Wikimedia Commons video search (real playable WebM/OGV files)
+//   news   — GDELT 2.0 live global news search (keyless), Wikipedia fallback
+//   index  — our own crawled pages + BM25 ranking, fully in-browser
 
 let TAB = "web";
 let CURRENT_Q = "";
 let INDEX_DATA = null;
 
-// ---------- shared helpers ----------
+// ---------- small helpers ----------
 function esc(s) {
   const d = document.createElement("div");
   d.textContent = s;
   return d.innerHTML;
 }
-
 function setStat(text) {
   document.getElementById("stat").hidden = false;
   document.getElementById("stat").textContent = text;
+}
+function showLoading() {
+  document.getElementById("results").hidden = false;
+  document.getElementById("results").innerHTML = '<div class="spinner"></div>';
+}
+function showEmpty(msg) {
+  document.getElementById("results").innerHTML =
+    '<div class="empty"><div class="big">🔍</div>' + esc(msg) + "</div>";
 }
 
 // ---------- BM25 (our own index) ----------
@@ -121,12 +205,12 @@ function tokenize(text) {
 const K1 = 1.5, B = 0.75;
 
 async function loadIndex() {
-  if (INDEX_DATA) return INDEX_DATA;
+  if (INDEX_DATA !== null) return INDEX_DATA;
   try {
     const res = await fetch("data/search-data.json");
     INDEX_DATA = await res.json();
   } catch (e) {
-    INDEX_DATA = null;
+    INDEX_DATA = false;
   }
   return INDEX_DATA;
 }
@@ -164,13 +248,8 @@ function snippet(text, qtoks, width = 260) {
   return esc(snip).replace(pat, "<b>$1</b>");
 }
 
-// ---------- live web search (MediaWiki API) ----------
-const WIKIS = [
-  { lang: "en", label: "en" },
-  { lang: "ml", label: "ml" },
-  { lang: "hi", label: "hi" },
-  { lang: "ta", label: "ta" },
-];
+// ---------- Web: MediaWiki search ----------
+const WIKIS = ["en", "ml", "hi", "ta"];
 
 async function wikiSearch(lang, q, limit) {
   const url = "https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search" +
@@ -180,21 +259,17 @@ async function wikiSearch(lang, q, limit) {
   const data = await res.json();
   return (data.query && data.query.search ? data.query.search : []).map(r => ({
     title: r.title,
-    // MediaWiki returns a snippet with <span class="searchmatch"> around hits
     snippet: (r.snippet || "").replace(/<span class="searchmatch">/g, "<b>")
                                .replace(/<\/span>/g, "</b>"),
     url: "https://" + lang + ".wikipedia.org/wiki/" +
          encodeURIComponent(r.title.replace(/ /g, "_")),
     lang: lang,
-    words: r.wordcount,
   }));
 }
 
 async function webSearch(q) {
   const perWiki = 4;
-  const lists = await Promise.allSettled(
-    WIKIS.map(w => wikiSearch(w.lang, q, perWiki)));
-  // interleave results round-robin so every language gets seen
+  const lists = await Promise.allSettled(WIKIS.map(l => wikiSearch(l, q, perWiki)));
   const out = [];
   for (let i = 0; i < perWiki; i++) {
     for (const r of lists) {
@@ -204,7 +279,68 @@ async function webSearch(q) {
   return out;
 }
 
-// ---------- rendering ----------
+// ---------- Images: Wikimedia Commons ----------
+async function imageSearch(q) {
+  const url = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
+    "&origin=*&generator=search&gsrsearch=" + encodeURIComponent(q) +
+    "&gsrnamespace=6&gsrlimit=24&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=400";
+  const res = await fetch(url);
+  const data = await res.json();
+  const pages = Object.values((data.query && data.query.pages) || {})
+    .filter(p => p.imageinfo && p.imageinfo[0])
+    .filter(p => (p.imageinfo[0].mime || "").startsWith("image/"))
+    .sort((a, b) => (a.index || 0) - (b.index || 0));
+  return pages.map(p => ({
+    title: p.title.replace(/^File:/, "").replace(/\.[a-z0-9]+$/i, ""),
+    thumb: p.imageinfo[0].thumburl || p.imageinfo[0].url,
+    page: p.imageinfo[0].descriptionurl,
+  }));
+}
+
+// ---------- Videos: Wikimedia Commons ----------
+async function videoSearch(q) {
+  const url = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
+    "&origin=*&generator=search&gsrsearch=" + encodeURIComponent(q + " filetype:video") +
+    "&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=400";
+  const res = await fetch(url);
+  const data = await res.json();
+  const pages = Object.values((data.query && data.query.pages) || {})
+    .filter(p => p.imageinfo && p.imageinfo[0])
+    .sort((a, b) => (a.index || 0) - (b.index || 0));
+  return pages.map(p => ({
+    title: p.title.replace(/^File:/, ""),
+    src: p.imageinfo[0].url,
+    poster: p.imageinfo[0].thumburl || "",
+    page: p.imageinfo[0].descriptionurl,
+    mime: p.imageinfo[0].mime,
+  }));
+}
+
+// ---------- News: GDELT 2.0 (keyless live global news) ----------
+async function newsSearch(q) {
+  const url = "https://api.gdeltproject.org/api/v2/doc/doc?query=" +
+    encodeURIComponent(q) + "&mode=ArtList&maxrecords=16&format=json" +
+    "&sort=DateDesc&timespan=7d";
+  const res = await fetch(url);
+  const data = await res.json();
+  return (data.articles || []).map(a => ({
+    title: a.title,
+    url: a.url,
+    domain: a.domain,
+    date: a.seendate,
+  }));
+}
+
+function fmtGdeltDate(s) {
+  // "20260921T120000Z" -> "21 Sep 2026, 12:00 UTC"
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/.exec(s || "");
+  if (!m) return "";
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return parseInt(m[3], 10) + " " + months[parseInt(m[2], 10) - 1] + " " + m[1] +
+         ", " + m[4] + ":" + m[5] + " UTC";
+}
+
+// ---------- renderers ----------
 function renderWeb(results) {
   const box = document.getElementById("results");
   box.innerHTML = "";
@@ -212,11 +348,74 @@ function renderWeb(results) {
     const div = document.createElement("div");
     div.className = "result";
     div.innerHTML =
-      '<div class="src"><span class="badge">' + r.lang + "</span> " +
-      esc(r.url) + "</div>" +
+      '<div class="src"><span class="badge">' + r.lang + "</span> " + esc(r.url) + "</div>" +
       '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
       esc(r.title) + "</a></h3>" +
       "<p>" + r.snippet + "…</p>";
+    box.appendChild(div);
+  }
+}
+
+function renderImages(results) {
+  const box = document.getElementById("results");
+  box.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "img-grid";
+  for (const r of results) {
+    const a = document.createElement("a");
+    a.className = "img-card";
+    a.href = r.page;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.title = r.title;
+    const img = document.createElement("img");
+    img.src = r.thumb;
+    img.loading = "lazy";
+    img.alt = r.title;
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.textContent = r.title;
+    a.appendChild(img);
+    a.appendChild(cap);
+    grid.appendChild(a);
+  }
+  box.appendChild(grid);
+}
+
+function renderVideos(results) {
+  const box = document.getElementById("results");
+  box.innerHTML = "";
+  for (const r of results) {
+    const div = document.createElement("div");
+    div.className = "vid-card";
+    const video = document.createElement("video");
+    video.controls = true;
+    video.preload = "metadata";
+    video.poster = r.poster;
+    video.src = r.src;
+    if (r.mime) video.setAttribute("type", r.mime);
+    const cap = document.createElement("div");
+    cap.className = "cap";
+    cap.innerHTML = '<a href="' + esc(r.page) + '" target="_blank" rel="noopener">' +
+      esc(r.title) + "</a>" +
+      '<span class="badge">open ↗</span>';
+    div.appendChild(video);
+    div.appendChild(cap);
+    box.appendChild(div);
+  }
+}
+
+function renderNews(results) {
+  const box = document.getElementById("results");
+  box.innerHTML = "";
+  for (const r of results) {
+    const div = document.createElement("div");
+    div.className = "news-card";
+    div.innerHTML =
+      '<div class="src"><span class="badge">' + esc(r.domain) + "</span></div>" +
+      '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+      esc(r.title) + "</a></h3>" +
+      '<div class="news-meta"><span>' + esc(fmtGdeltDate(r.date)) + "</span></div>";
     box.appendChild(div);
   }
 }
@@ -238,37 +437,81 @@ function renderIndex(results, qtoks) {
   }
 }
 
+// ---------- search orchestration ----------
 async function runSearch(q, tab) {
   CURRENT_Q = q;
   document.body.classList.add("results");
   document.getElementById("tabsbar").hidden = false;
-  const box = document.getElementById("results");
-  box.hidden = false;
-  setStat("Searching…");
+  document.getElementById("meta").hidden = true;
+  document.getElementById("hint").hidden = true;
+  showLoading();
+  const t0 = performance.now();
 
-  if (tab === "web") {
-    const results = await webSearch(q);
-    if (q !== CURRENT_Q) return;  // a newer query started
-    renderWeb(results);
-    setStat(results.length + " web results for “" + q + "”");
-  } else {
-    await loadIndex();
-    const results = INDEX_DATA ? bm25Search(q) : [];
-    renderIndex(results, tokenize(q));
-    setStat(INDEX_DATA
-      ? INDEX_DATA.N + " indexed pages — " + results.length + " results for “" + q + "”"
-      : "Index unavailable (run crawler + indexer + build_static first)");
+  try {
+    if (tab === "web") {
+      const results = await webSearch(q);
+      if (q !== CURRENT_Q) return;
+      renderWeb(results);
+      setStat("About " + results.length + " results (" +
+              ((performance.now() - t0) / 1000).toFixed(2) + " seconds)");
+    } else if (tab === "images") {
+      const results = await imageSearch(q);
+      if (q !== CURRENT_Q) return;
+      renderImages(results);
+      setStat("About " + results.length + " images (" +
+              ((performance.now() - t0) / 1000).toFixed(2) + " seconds)");
+    } else if (tab === "videos") {
+      const results = await videoSearch(q);
+      if (q !== CURRENT_Q) return;
+      renderVideos(results);
+      setStat("About " + results.length + " videos (" +
+              ((performance.now() - t0) / 1000).toFixed(2) + " seconds)");
+    } else if (tab === "news") {
+      let results = [];
+      let via = "";
+      try {
+        results = await newsSearch(q);
+        via = "GDELT live news";
+      } catch (e) {
+        // GDELT unreachable — fall back to Wikipedia articles
+        results = await webSearch(q);
+        via = "Wikipedia fallback";
+      }
+      if (q !== CURRENT_Q) return;
+      if (via === "Wikipedia fallback") {
+        renderWeb(results);
+        document.querySelector("#results").insertAdjacentHTML("afterbegin",
+          '<div class="note">Live news feed unavailable right now — showing related encyclopedia articles instead.</div>');
+      } else {
+        renderNews(results);
+      }
+      setStat("About " + results.length + " news articles · " + via);
+    } else {  // index
+      await loadIndex();
+      if (q !== CURRENT_Q) return;
+      const results = INDEX_DATA ? bm25Search(q) : [];
+      renderIndex(results, tokenize(q));
+      setStat(INDEX_DATA
+        ? INDEX_DATA.N + " indexed pages — " + results.length + " results"
+        : "Index unavailable");
+    }
+  } catch (e) {
+    if (q !== CURRENT_Q) return;
+    showEmpty("Something went wrong while searching. Please try again.");
   }
 }
 
 function switchTab(tab) {
   TAB = tab;
-  document.getElementById("tab-web").classList.toggle("active", tab === "web");
-  document.getElementById("tab-index").classList.toggle("active", tab === "index");
+  for (const t of ["web", "images", "videos", "news", "index"]) {
+    const el = document.getElementById("tab-" + t);
+    el.classList.toggle("active", t === tab);
+  }
   if (CURRENT_Q) runSearch(CURRENT_Q, TAB);
   if (history.replaceState)
     history.replaceState(null, "", "?q=" + encodeURIComponent(CURRENT_Q) +
                              "&t=" + tab);
+  window.scrollTo({ top: 0 });
 }
 
 function go(q) {
@@ -284,25 +527,35 @@ document.getElementById("sf").addEventListener("submit", (e) => {
   go(document.getElementById("q").value.trim());
 });
 
+// "/" focuses the search box
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement.tagName !== "INPUT") {
+    e.preventDefault();
+    document.getElementById("q").focus();
+  }
+});
+
+// ---------- dark mode ----------
+function toggleTheme() {
+  const dark = document.body.classList.toggle("dark");
+  localStorage.setItem("minisearch-theme", dark ? "dark" : "light");
+  document.getElementById("themeBtn").textContent = dark ? "☀️" : "🌙";
+}
+
 // ---------- startup ----------
-(async () => {
-  // preload our index in the background; the web tab does not need it
-  const idx = loadIndex();
-  const meta = document.getElementById("meta");
-  const data = await idx.catch(() => null);
-  if (data) {
-    meta.textContent = data.N + " pages crawled and indexed · " +
-      Object.keys(data.postings).length + " terms · BM25 ranking";
-  } else {
-    meta.textContent = "Live web search powered by the MediaWiki API";
+(function () {
+  if (localStorage.getItem("minisearch-theme") === "dark") {
+    document.body.classList.add("dark");
+    document.getElementById("themeBtn").textContent = "☀️";
   }
   const params = new URLSearchParams(location.search);
   const q = params.get("q");
   const t = params.get("t");
-  if (t === "index") {
-    TAB = "index";
-    document.getElementById("tab-web").classList.remove("active");
-    document.getElementById("tab-index").classList.add("active");
+  if (["images", "videos", "news", "index"].includes(t)) {
+    TAB = t;
+    for (const name of ["web", "images", "videos", "news", "index"]) {
+      document.getElementById("tab-" + name).classList.toggle("active", name === t);
+    }
   }
   if (q) go(q);
 })();
