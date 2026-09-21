@@ -43,7 +43,6 @@
   .icon-btn:hover { background: var(--chip); }
   .meta { margin-top: 26px; color: var(--text-soft); font-size: 13px; text-align: center;
           max-width: 560px; }
-  .hint { margin-top: 8px; color: var(--text-soft); font-size: 12px; }
   .foot { background: var(--bg-soft); padding: 12px 24px; color: var(--text-soft);
           font-size: 13px; border-top: 1px solid var(--line); display: flex;
           flex-wrap: wrap; gap: 14px; justify-content: center; }
@@ -121,6 +120,13 @@
              animation: spin .8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .note { color: var(--text-soft); font-size: 12.5px; margin: 6px 0 14px; }
+
+  /* infinite scroll */
+  #sentinel { height: 10px; }
+  .more-loading { display: flex; align-items: center; justify-content: center; gap: 10px;
+                  color: var(--text-soft); font-size: 13px; padding: 18px 0 30px; }
+  .mini-spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--chip);
+              border-top-color: var(--accent); animation: spin .8s linear infinite; }
 </style>
 </head>
 <body>
@@ -133,8 +139,7 @@
         <button type="submit" class="icon-btn" title="Search">🔍</button>
       </div>
     </form>
-    <div class="meta" id="meta">MiniSearch — search the web, images, videos & news</div>
-    <div class="hint" id="hint"></div>
+    <div class="meta" id="meta">MiniSearch — endless search across web, images, videos & news</div>
   </div>
   <div id="tabsbar" class="tabs" hidden>
     <button class="tab active" id="tab-web" onclick="switchTab('web')">🌐 Web</button>
@@ -147,24 +152,36 @@
 </div>
 <div id="stat" class="stat" hidden></div>
 <div id="results" class="container" hidden></div>
+<div id="sentinel" hidden></div>
+<div id="more" class="more-loading" hidden><div class="mini-spin"></div>Loading more…</div>
 <div class="foot">
   <span>MiniSearch — a tiny but real search engine (educational project)</span>
   <a href="https://github.com/melleeyyy/minisearch">GitHub</a>
-  <span>Web & news: live APIs · My index: BM25 in your browser</span>
+  <span>Live APIs · BM25 in your browser · infinite scroll</span>
 </div>
 
 <script>
-// ================= MiniSearch v3 =================
-// Tabs:
-//   web    — live search across 4 Wikipedia language editions (MediaWiki API)
-//   images — Wikimedia Commons image search (CORS-open, no key)
-//   videos — Wikimedia Commons video search (real playable WebM/OGV files)
-//   news   — GDELT 2.0 live global news search (keyless), Wikipedia fallback
-//   index  — our own crawled pages + BM25 ranking, fully in-browser
+// ================= MiniSearch v4 — with infinite scroll =================
+// Tabs (all load more results automatically as you scroll):
+//   web    — 4 Wikipedia language editions (MediaWiki API, sroffset paging)
+//   images — Wikimedia Commons images (gsroffset paging)
+//   videos — Wikimedia Commons videos (real playable WebM/OGV files)
+//   news   — GDELT 2.0 live global news (keyless), Wikipedia fallback
+//   index  — our own crawled pages + BM25, fully in-browser
 
 let TAB = "web";
 let CURRENT_Q = "";
 let INDEX_DATA = null;
+
+// pagination state (reset on every new query / tab)
+let PAGE = 0;            // next page to fetch
+let NO_MORE = false;
+let LOADING = false;
+let SEARCH_SEQ = 0;      // invalidates stale async work
+let TOTAL_SHOWN = 0;
+let NEWS_POOL = null;    // news pool fetched once
+let INDEX_POOL = null;   // BM25 results computed once
+let T0 = 0;
 
 // ---------- small helpers ----------
 function esc(s) {
@@ -176,13 +193,23 @@ function setStat(text) {
   document.getElementById("stat").hidden = false;
   document.getElementById("stat").textContent = text;
 }
+function updateStat(prefix) {
+  setStat(prefix + TOTAL_SHOWN + " results (" +
+          ((performance.now() - T0) / 1000).toFixed(2) + " seconds)");
+}
 function showLoading() {
   document.getElementById("results").hidden = false;
   document.getElementById("results").innerHTML = '<div class="spinner"></div>';
+  document.getElementById("sentinel").hidden = true;
+  document.getElementById("more").hidden = true;
 }
 function showEmpty(msg) {
   document.getElementById("results").innerHTML =
     '<div class="empty"><div class="big">🔍</div>' + esc(msg) + "</div>";
+}
+function statPrefixFor(tab) {
+  return { web: "About ", images: "About ", videos: "About ",
+           news: "About ", index: "" }[tab] || "";
 }
 
 // ---------- BM25 (our own index) ----------
@@ -215,7 +242,7 @@ async function loadIndex() {
   return INDEX_DATA;
 }
 
-function bm25Search(query, topK = 10) {
+function bm25Search(query, topK = 200) {
   const qtoks = tokenize(query);
   if (!qtoks.length || !INDEX_DATA) return [];
   const { N, avgdl, docs, postings } = INDEX_DATA;
@@ -248,13 +275,13 @@ function snippet(text, qtoks, width = 260) {
   return esc(snip).replace(pat, "<b>$1</b>");
 }
 
-// ---------- Web: MediaWiki search ----------
+// ---------- Web: MediaWiki search (paginated with sroffset) ----------
 const WIKIS = ["en", "ml", "hi", "ta"];
 
-async function wikiSearch(lang, q, limit) {
+async function wikiSearch(lang, q, limit, offset) {
   const url = "https://" + lang + ".wikipedia.org/w/api.php?action=query&list=search" +
     "&srsearch=" + encodeURIComponent(q) + "&srlimit=" + limit +
-    "&format=json&origin=*";
+    "&sroffset=" + offset + "&format=json&origin=*";
   const res = await fetch(url);
   const data = await res.json();
   return (data.query && data.query.search ? data.query.search : []).map(r => ({
@@ -267,9 +294,11 @@ async function wikiSearch(lang, q, limit) {
   }));
 }
 
-async function webSearch(q) {
+async function fetchWebPage(q, page) {
   const perWiki = 4;
-  const lists = await Promise.allSettled(WIKIS.map(l => wikiSearch(l, q, perWiki)));
+  const offset = page * perWiki;
+  const lists = await Promise.allSettled(
+    WIKIS.map(l => wikiSearch(l, q, perWiki, offset)));
   const out = [];
   for (let i = 0; i < perWiki; i++) {
     for (const r of lists) {
@@ -279,11 +308,13 @@ async function webSearch(q) {
   return out;
 }
 
-// ---------- Images: Wikimedia Commons ----------
-async function imageSearch(q) {
+// ---------- Images: Wikimedia Commons (gsroffset paging) ----------
+async function fetchImagesPage(q, page) {
+  const limit = 24;
   const url = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
     "&origin=*&generator=search&gsrsearch=" + encodeURIComponent(q) +
-    "&gsrnamespace=6&gsrlimit=24&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=400";
+    "&gsrnamespace=6&gsrlimit=" + limit + "&gsroffset=" + (page * limit) +
+    "&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=400";
   const res = await fetch(url);
   const data = await res.json();
   const pages = Object.values((data.query && data.query.pages) || {})
@@ -297,11 +328,14 @@ async function imageSearch(q) {
   }));
 }
 
-// ---------- Videos: Wikimedia Commons ----------
-async function videoSearch(q) {
+// ---------- Videos: Wikimedia Commons (gsroffset paging) ----------
+async function fetchVideosPage(q, page) {
+  const limit = 6;
   const url = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
-    "&origin=*&generator=search&gsrsearch=" + encodeURIComponent(q + " filetype:video") +
-    "&gsrnamespace=6&gsrlimit=8&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=400";
+    "&origin=*&generator=search&gsrsearch=" +
+    encodeURIComponent(q + " filetype:video") +
+    "&gsrnamespace=6&gsrlimit=" + limit + "&gsroffset=" + (page * limit) +
+    "&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=400";
   const res = await fetch(url);
   const data = await res.json();
   const pages = Object.values((data.query && data.query.pages) || {})
@@ -316,23 +350,47 @@ async function videoSearch(q) {
   }));
 }
 
-// ---------- News: GDELT 2.0 (keyless live global news) ----------
-async function newsSearch(q) {
-  const url = "https://api.gdeltproject.org/api/v2/doc/doc?query=" +
-    encodeURIComponent(q) + "&mode=ArtList&maxrecords=16&format=json" +
-    "&sort=DateDesc&timespan=7d";
-  const res = await fetch(url);
-  const data = await res.json();
-  return (data.articles || []).map(a => ({
-    title: a.title,
-    url: a.url,
-    domain: a.domain,
-    date: a.seendate,
-  }));
+// ---------- News: GDELT 2.0 (fetch a large pool once, reveal in pages) ----------
+async function fetchNewsPool(q) {
+  try {
+    const url = "https://api.gdeltproject.org/api/v2/doc/doc?query=" +
+      encodeURIComponent(q) + "&mode=ArtList&maxrecords=75&format=json" +
+      "&sort=DateDesc&timespan=7d";
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.articles || !data.articles.length) throw new Error("empty");
+    return { items: data.articles.map(a => ({
+      title: a.title, url: a.url, domain: a.domain, date: a.seendate,
+    })), via: "GDELT live news" };
+  } catch (e) {
+    const items = await fetchWebPage(q, 0);   // Wikipedia fallback
+    return { items: items.map(r => ({
+      title: r.title, url: r.url, domain: r.lang, date: "",
+    })), via: "Wikipedia fallback", fallback: true };
+  }
+}
+
+function fetchNewsPage(q, page) {
+  const perPage = 15;
+  const start = page * perPage;
+  if (start >= NEWS_POOL.items.length) return Promise.resolve([]);
+  return Promise.resolve(NEWS_POOL.items.slice(start, start + perPage));
+}
+
+// ---------- Index: BM25 pool, revealed in pages ----------
+async function fetchIndexPool(q) {
+  await loadIndex();
+  return INDEX_DATA ? bm25Search(q) : [];
+}
+
+function fetchIndexPage(q, page) {
+  const perPage = 10;
+  const start = page * perPage;
+  if (start >= INDEX_POOL.length) return Promise.resolve([]);
+  return Promise.resolve(INDEX_POOL.slice(start, start + perPage));
 }
 
 function fmtGdeltDate(s) {
-  // "20260921T120000Z" -> "21 Sep 2026, 12:00 UTC"
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/.exec(s || "");
   if (!m) return "";
   const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -340,177 +398,200 @@ function fmtGdeltDate(s) {
          ", " + m[4] + ":" + m[5] + " UTC";
 }
 
-// ---------- renderers ----------
-function renderWeb(results) {
-  const box = document.getElementById("results");
-  box.innerHTML = "";
-  for (const r of results) {
-    const div = document.createElement("div");
-    div.className = "result";
-    div.innerHTML =
-      '<div class="src"><span class="badge">' + r.lang + "</span> " + esc(r.url) + "</div>" +
-      '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
-      esc(r.title) + "</a></h3>" +
-      "<p>" + r.snippet + "…</p>";
-    box.appendChild(div);
-  }
+// ---------- fetchers dispatch ----------
+async function fetchPage(tab, q, page) {
+  if (tab === "web") return fetchWebPage(q, page);
+  if (tab === "images") return fetchImagesPage(q, page);
+  if (tab === "videos") return fetchVideosPage(q, page);
+  if (tab === "news") return fetchNewsPage(q, page);
+  if (tab === "index") return fetchIndexPage(q, page);
+  return [];
 }
 
-function renderImages(results) {
-  const box = document.getElementById("results");
-  box.innerHTML = "";
-  const grid = document.createElement("div");
-  grid.className = "img-grid";
-  for (const r of results) {
-    const a = document.createElement("a");
-    a.className = "img-card";
-    a.href = r.page;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.title = r.title;
-    const img = document.createElement("img");
-    img.src = r.thumb;
-    img.loading = "lazy";
-    img.alt = r.title;
-    const cap = document.createElement("div");
-    cap.className = "cap";
-    cap.textContent = r.title;
-    a.appendChild(img);
-    a.appendChild(cap);
-    grid.appendChild(a);
-  }
-  box.appendChild(grid);
+// ---------- renderers (append mode for infinite scroll) ----------
+function webResultNode(r) {
+  const div = document.createElement("div");
+  div.className = "result";
+  div.innerHTML =
+    '<div class="src"><span class="badge">' + r.lang + "</span> " + esc(r.url) + "</div>" +
+    '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+    esc(r.title) + "</a></h3>" +
+    "<p>" + r.snippet + "…</p>";
+  return div;
 }
 
-function renderVideos(results) {
-  const box = document.getElementById("results");
-  box.innerHTML = "";
-  for (const r of results) {
-    const div = document.createElement("div");
-    div.className = "vid-card";
-    const video = document.createElement("video");
-    video.controls = true;
-    video.preload = "metadata";
-    video.poster = r.poster;
-    video.src = r.src;
-    if (r.mime) video.setAttribute("type", r.mime);
-    const cap = document.createElement("div");
-    cap.className = "cap";
-    cap.innerHTML = '<a href="' + esc(r.page) + '" target="_blank" rel="noopener">' +
-      esc(r.title) + "</a>" +
-      '<span class="badge">open ↗</span>';
-    div.appendChild(video);
-    div.appendChild(cap);
-    box.appendChild(div);
-  }
+function newsResultNode(r) {
+  const div = document.createElement("div");
+  div.className = "news-card";
+  div.innerHTML =
+    '<div class="src"><span class="badge">' + esc(r.domain) + "</span></div>" +
+    '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
+    esc(r.title) + "</a></h3>" +
+    '<div class="news-meta"><span>' + esc(fmtGdeltDate(r.date)) + "</span></div>";
+  return div;
 }
 
-function renderNews(results) {
-  const box = document.getElementById("results");
-  box.innerHTML = "";
-  for (const r of results) {
-    const div = document.createElement("div");
-    div.className = "news-card";
-    div.innerHTML =
-      '<div class="src"><span class="badge">' + esc(r.domain) + "</span></div>" +
-      '<h3><a href="' + esc(r.url) + '" target="_blank" rel="noopener">' +
-      esc(r.title) + "</a></h3>" +
-      '<div class="news-meta"><span>' + esc(fmtGdeltDate(r.date)) + "</span></div>";
-    box.appendChild(div);
-  }
+function indexResultNode(item, qtoks) {
+  const [url, score] = item;
+  const pg = INDEX_DATA.pages[url] || { title: url, text: "" };
+  const div = document.createElement("div");
+  div.className = "result";
+  div.innerHTML =
+    '<div class="src"><span class="badge">index</span> ' + esc(url) + "</div>" +
+    '<h3><a href="' + esc(url) + '" target="_blank" rel="noopener">' +
+    esc(pg.title) + "</a></h3>" +
+    "<p>" + snippet(pg.text, qtoks) + "</p>" +
+    '<span class="score">BM25 score: ' + score.toFixed(2) + "</span>";
+  return div;
 }
 
-function renderIndex(results, qtoks) {
+function imageCardNode(r) {
+  const a = document.createElement("a");
+  a.className = "img-card";
+  a.href = r.page;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.title = r.title;
+  const img = document.createElement("img");
+  img.src = r.thumb;
+  img.loading = "lazy";
+  img.alt = r.title;
+  const cap = document.createElement("div");
+  cap.className = "cap";
+  cap.textContent = r.title;
+  a.appendChild(img);
+  a.appendChild(cap);
+  return a;
+}
+
+function videoCardNode(r) {
+  const div = document.createElement("div");
+  div.className = "vid-card";
+  const video = document.createElement("video");
+  video.controls = true;
+  video.preload = "metadata";
+  video.poster = r.poster;
+  video.src = r.src;
+  if (r.mime) video.setAttribute("type", r.mime);
+  const cap = document.createElement("div");
+  cap.className = "cap";
+  cap.innerHTML = '<a href="' + esc(r.page) + '" target="_blank" rel="noopener">' +
+    esc(r.title) + "</a>" +
+    '<span class="badge">open ↗</span>';
+  div.appendChild(video);
+  div.appendChild(cap);
+  return div;
+}
+
+function appendResults(tab, items) {
   const box = document.getElementById("results");
-  box.innerHTML = "";
-  for (const [url, score] of results) {
-    const pg = INDEX_DATA.pages[url] || { title: url, text: "" };
-    const div = document.createElement("div");
-    div.className = "result";
-    div.innerHTML =
-      '<div class="src"><span class="badge">index</span> ' + esc(url) + "</div>" +
-      '<h3><a href="' + esc(url) + '" target="_blank" rel="noopener">' +
-      esc(pg.title) + "</a></h3>" +
-      "<p>" + snippet(pg.text, qtoks) + "</p>" +
-      '<span class="score">BM25 score: ' + score.toFixed(2) + "</span>";
-    box.appendChild(div);
+  let target = box;
+  if (tab === "images") {
+    let grid = box.querySelector(".img-grid");
+    if (!grid) {
+      box.innerHTML = "";
+      grid = document.createElement("div");
+      grid.className = "img-grid";
+      box.appendChild(grid);
+    }
+    target = grid;
   }
+  for (const r of items) {
+    let node = null;
+    if (tab === "web") node = webResultNode(r);
+    else if (tab === "news") node = newsResultNode(r);
+    else if (tab === "images") node = imageCardNode(r);
+    else if (tab === "videos") node = videoCardNode(r);
+    else if (tab === "index") node = indexResultNode(r, tokenize(CURRENT_Q));
+    if (node) target.appendChild(node);
+  }
+  TOTAL_SHOWN += items.length;
 }
 
 // ---------- search orchestration ----------
 async function runSearch(q, tab) {
   CURRENT_Q = q;
+  const seq = ++SEARCH_SEQ;
+  PAGE = 0;
+  NO_MORE = false;
+  TOTAL_SHOWN = 0;
+  NEWS_POOL = null;
+  INDEX_POOL = null;
+  T0 = performance.now();
+
   document.body.classList.add("results");
   document.getElementById("tabsbar").hidden = false;
   document.getElementById("meta").hidden = true;
-  document.getElementById("hint").hidden = true;
   showLoading();
-  const t0 = performance.now();
 
+  if (tab === "index") INDEX_POOL = await fetchIndexPool(q);
+  if (tab === "news") {
+    NEWS_POOL = await fetchNewsPool(q);
+  }
+
+  const items = await fetchPage(tab, q, 0);
+  if (seq !== SEARCH_SEQ) return;
+
+  document.getElementById("results").innerHTML = "";
+  if (tab === "news" && NEWS_POOL.fallback) {
+    document.getElementById("results").insertAdjacentHTML("afterbegin",
+      '<div class="note">Live news feed unavailable right now — showing related encyclopedia articles instead.</div>');
+  }
+  if (!items.length) {
+    showEmpty("No results found — try a different search.");
+    document.getElementById("sentinel").hidden = true;
+    return;
+  }
+  appendResults(tab, items);
+  updateStat(statPrefixFor(tab));
+  PAGE = 1;
+  document.getElementById("sentinel").hidden = false;   // enable infinite scroll
+}
+
+async function loadMore() {
+  if (LOADING || NO_MORE || !CURRENT_Q) return;
+  LOADING = true;
+  document.getElementById("more").hidden = false;
+  const seq = SEARCH_SEQ;
   try {
-    if (tab === "web") {
-      const results = await webSearch(q);
-      if (q !== CURRENT_Q) return;
-      renderWeb(results);
-      setStat("About " + results.length + " results (" +
-              ((performance.now() - t0) / 1000).toFixed(2) + " seconds)");
-    } else if (tab === "images") {
-      const results = await imageSearch(q);
-      if (q !== CURRENT_Q) return;
-      renderImages(results);
-      setStat("About " + results.length + " images (" +
-              ((performance.now() - t0) / 1000).toFixed(2) + " seconds)");
-    } else if (tab === "videos") {
-      const results = await videoSearch(q);
-      if (q !== CURRENT_Q) return;
-      renderVideos(results);
-      setStat("About " + results.length + " videos (" +
-              ((performance.now() - t0) / 1000).toFixed(2) + " seconds)");
-    } else if (tab === "news") {
-      let results = [];
-      let via = "";
-      try {
-        results = await newsSearch(q);
-        via = "GDELT live news";
-      } catch (e) {
-        // GDELT unreachable — fall back to Wikipedia articles
-        results = await webSearch(q);
-        via = "Wikipedia fallback";
-      }
-      if (q !== CURRENT_Q) return;
-      if (via === "Wikipedia fallback") {
-        renderWeb(results);
-        document.querySelector("#results").insertAdjacentHTML("afterbegin",
-          '<div class="note">Live news feed unavailable right now — showing related encyclopedia articles instead.</div>');
-      } else {
-        renderNews(results);
-      }
-      setStat("About " + results.length + " news articles · " + via);
-    } else {  // index
-      await loadIndex();
-      if (q !== CURRENT_Q) return;
-      const results = INDEX_DATA ? bm25Search(q) : [];
-      renderIndex(results, tokenize(q));
-      setStat(INDEX_DATA
-        ? INDEX_DATA.N + " indexed pages — " + results.length + " results"
-        : "Index unavailable");
+    const items = await fetchPage(TAB, CURRENT_Q, PAGE);
+    if (seq !== SEARCH_SEQ) return;
+    if (!items.length) {
+      NO_MORE = true;
+      document.getElementById("sentinel").hidden = true;
+      document.getElementById("more").hidden = true;
+    } else {
+      appendResults(TAB, items);
+      PAGE += 1;
+      updateStat(statPrefixFor(TAB));
     }
   } catch (e) {
-    if (q !== CURRENT_Q) return;
-    showEmpty("Something went wrong while searching. Please try again.");
+    // network hiccup — stop trying after this page
+    NO_MORE = true;
+    document.getElementById("more").hidden = true;
+  } finally {
+    LOADING = false;
+    if (!NO_MORE) {
+      // hide the "loading more" bar shortly after the new page arrives
+      setTimeout(() => { document.getElementById("more").hidden = true; }, 600);
+    }
   }
 }
+
+// infinite scroll: when the sentinel enters the viewport, load the next page
+const observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) loadMore();
+}, { rootMargin: "600px" });
+observer.observe(document.getElementById("sentinel"));
 
 function switchTab(tab) {
   TAB = tab;
   for (const t of ["web", "images", "videos", "news", "index"]) {
-    const el = document.getElementById("tab-" + t);
-    el.classList.toggle("active", t === tab);
+    document.getElementById("tab-" + t).classList.toggle("active", t === tab);
   }
   if (CURRENT_Q) runSearch(CURRENT_Q, TAB);
   if (history.replaceState)
-    history.replaceState(null, "", "?q=" + encodeURIComponent(CURRENT_Q) +
-                             "&t=" + tab);
+    history.replaceState(null, "", "?q=" + encodeURIComponent(CURRENT_Q) + "&t=" + tab);
   window.scrollTo({ top: 0 });
 }
 
