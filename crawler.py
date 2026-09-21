@@ -4,6 +4,7 @@ Crawler: fetches pages starting from seed URLs (seeds.txt),
 respects robots.txt, stays on the seed domains, saves pages.jsonl.
 """
 import json
+import os
 import re
 import sys
 import time
@@ -117,6 +118,7 @@ def crawl(seed_file, out_file):
                     queue.append((link, depth + 1))
         time.sleep(DELAY)
 
+    os.makedirs(os.path.dirname(out_file) or ".", exist_ok=True)
     with open(out_file, "w", encoding="utf-8") as f:
         for pg in pages:
             f.write(json.dumps(pg, ensure_ascii=False) + "\n")
