@@ -1,9 +1,9 @@
-# aey
+# MiniSearch
 
 **Live site:** https://melleeyyy.github.io/minisearch/
 **Repo:** https://github.com/melleeyyy/minisearch
 
-aey has five search tabs:
+MiniSearch has five search tabs:
 
 1. **Web** (default) — live full-corpus search across several Wikipedia language
    editions (English, Malayalam, Hindi, Tamil — ~65 million articles combined)
@@ -18,7 +18,9 @@ aey has five search tabs:
    in your browser over the pages in `data/`.
 
 All tabs use silent infinite scroll — more results load automatically as you
-scroll. Minimal dark UI; `/` focuses the search box.
+scroll. Minimal UI in a blue / green / white / black palette, a subtle rain +
+lightning backdrop, dark theme by default with a System / Light / Dark switch in
+settings, and `/` to focus the search box.
 
 Every push to `main` triggers a GitHub Actions workflow that re-crawls the seed
 sites, rebuilds the index and redeploys the site, so the indexed data always
@@ -72,7 +74,7 @@ python app.py                         # web UI → http://localhost:5000
 
 ## How is this different from Google?
 
-| | aey | Google |
+| | MiniSearch | Google |
 |---|---|---|
 | Web results | ~65M Wikipedia articles (live API) | Hundreds of billions of pages |
 | Images / Videos | Wikimedia Commons (freely licensed) | The whole web |

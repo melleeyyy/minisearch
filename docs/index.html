@@ -3,31 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>aey</title>
+<title>MiniSearch</title>
 <style>
+  /* palette: blue #4285F4 · green #66BB6A · white · black */
   :root {
-    --bg: #000000; --bg-soft: #0d0e10; --text: #e8eaed; --text-soft: #9aa0a6;
-    --line: #26292c; --card: #131416; --blue: #2E7DFF; --green: #52D03C;
+    --bg: #000000; --bg-soft: #0d0e10; --text: #ffffff; --text-soft: #9aa0a6;
+    --line: #26292c; --card: #131416; --blue: #4285F4; --green: #66BB6A;
+  }
+  body.light {
+    --bg: #ffffff; --bg-soft: #f6f8fa; --text: #202124; --text-soft: #5f6368;
+    --line: #dfe1e5; --card: #f1f3f4;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
   body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
          background: var(--bg); color: var(--text); min-height: 100vh;
-         display: flex; flex-direction: column; }
+         display: flex; flex-direction: column;
+         transition: background .25s, color .25s; }
   a { color: inherit; }
-  img { display: block; }
 
-  /* ---- home: only the logo and the search bar ---- */
+  /* ---- weather backdrop (rain + lightning) ---- */
+  #fx { position: fixed; inset: 0; width: 100%; height: 100%;
+        z-index: 0; pointer-events: none; }
+  .wrap { position: relative; z-index: 1; display: flex;
+          flex-direction: column; min-height: 100vh; }
+
+  /* ---- brand ---- */
+  .brand { font-family: Arial, system-ui, sans-serif; font-weight: 700;
+           letter-spacing: -2px; user-select: none; }
+  .brand .m { color: var(--text); }
+  .brand .s { background: linear-gradient(90deg, #4285F4 20%, #66BB6A 90%);
+              -webkit-background-clip: text; background-clip: text;
+              color: transparent; }
+
+  /* ---- home: only the name and the search bar ---- */
   .home { flex: 1; display: flex; flex-direction: column; align-items: center;
           justify-content: center; padding: 20px; }
-  .home .brand { height: 96px; width: auto; margin-bottom: 30px; }
+  .home .brand { font-size: 56px; margin-bottom: 30px; }
   form { width: 100%; max-width: 560px; }
   .box { display: flex; align-items: center; gap: 10px; background: var(--bg-soft);
          border: 1px solid var(--line); border-radius: 26px; padding: 13px 20px;
          transition: border-color .15s, box-shadow .15s; }
   .box:hover { border-color: #3a3e42; }
+  body.light .box:hover { border-color: #b9bec4; }
   .box:focus-within { border-color: var(--blue);
-                      box-shadow: 0 0 0 3px rgba(46, 125, 255, .18); }
+                      box-shadow: 0 0 0 3px rgba(66, 133, 244, .18); }
   input[type=text] { flex: 1; border: none; outline: none; font-size: 16.5px;
          background: transparent; color: var(--text); }
   input[type=text]::placeholder { color: var(--text-soft); }
@@ -37,9 +57,32 @@
   .go:hover { color: var(--blue); }
   .go svg { width: 20px; height: 20px; }
 
+  /* ---- settings ---- */
+  .gear { position: fixed; top: 14px; right: 16px; z-index: 20;
+          background: none; border: none; cursor: pointer; color: var(--text-soft);
+          padding: 8px; border-radius: 50%; display: flex; }
+  .gear:hover { color: var(--text); background: var(--card); }
+  .gear svg { width: 19px; height: 19px; }
+  #settings { position: fixed; top: 54px; right: 16px; z-index: 20;
+              background: var(--bg-soft); border: 1px solid var(--line);
+              border-radius: 14px; padding: 6px; min-width: 150px;
+              box-shadow: 0 8px 28px rgba(0, 0, 0, .45); }
+  body.light #settings { box-shadow: 0 8px 28px rgba(0, 0, 0, .15); }
+  #settings[hidden] { display: none; }
+  #settings .s-title { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+                       color: var(--text-soft); padding: 6px 10px 4px; }
+  #settings button { display: flex; align-items: center; gap: 9px; width: 100%;
+                     border: none; background: none; color: var(--text);
+                     font-size: 14px; padding: 8px 10px; border-radius: 9px;
+                     cursor: pointer; text-align: left; }
+  #settings button:hover { background: var(--card); }
+  #settings .dot { width: 8px; height: 8px; border-radius: 50%;
+                   border: 1.5px solid var(--text-soft); flex: none; }
+  #settings button.on .dot { background: var(--blue); border-color: var(--blue); }
+
   /* ---- results mode ---- */
   body.results .home { flex: none; padding: 16px 0 2px; }
-  body.results .home .brand { height: 34px; margin-bottom: 12px; }
+  body.results .home .brand { font-size: 26px; margin-bottom: 12px; letter-spacing: -1px; }
   body.results form { max-width: 600px; margin: 0 auto; }
   .header2 { position: sticky; top: 0; z-index: 10; background: var(--bg);
              border-bottom: 1px solid var(--line); }
@@ -73,6 +116,7 @@
   .news-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
                padding: 14px 16px; margin-bottom: 12px; transition: border-color .15s; }
   .news-card:hover { border-color: #3a3e42; }
+  body.light .news-card:hover { border-color: #b9bec4; }
   .news-card h3 a { font-size: 16.5px; line-height: 1.35; }
   .news-meta { color: var(--text-soft); font-size: 12px; margin-top: 6px; }
 
@@ -102,9 +146,11 @@
 </style>
 </head>
 <body>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="wrap">
 <div class="header2">
   <div class="home">
-    <img class="brand" src="logo.png" alt="aey">
+    <div class="brand"><span class="m">Mini</span><span class="s">Search</span></div>
     <form id="sf" action="#" method="get" autocomplete="off">
       <div class="box">
         <input type="text" id="q" name="q" placeholder="Search" autofocus>
@@ -129,9 +175,24 @@
 <div id="stat" class="stat" hidden></div>
 <div id="results" class="container" hidden></div>
 <div id="sentinel" hidden></div>
+</div>
+
+<button class="gear" id="gearBtn" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"></circle>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+  </svg>
+</button>
+<div id="settings" hidden>
+  <div class="s-title">Theme</div>
+  <button id="th-system"><span class="dot"></span>System</button>
+  <button id="th-light"><span class="dot"></span>Light</button>
+  <button id="th-dark"><span class="dot"></span>Dark</button>
+</div>
 
 <script>
-// ================= aey =================
+// ================= MiniSearch =================
 // Tabs (all load more results silently as you scroll):
 //   web    — Wikipedia language editions (MediaWiki API)
 //   images — Wikimedia Commons images
@@ -550,8 +611,144 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ---------- theme: default dark; System / Light / Dark in settings ----------
+const THEME_KEY = "minisearch-theme";
+let themePref = localStorage.getItem(THEME_KEY) || "dark";   // default: dark
+
+function applyTheme() {
+  let dark = themePref === "dark";
+  if (themePref === "system")
+    dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  document.body.classList.toggle("light", !dark);
+  for (const t of ["system", "light", "dark"]) {
+    document.getElementById("th-" + t).classList.toggle("on", t === themePref);
+  }
+}
+
+function setTheme(pref) {
+  themePref = pref;
+  localStorage.setItem(THEME_KEY, pref);
+  applyTheme();
+}
+
+const gearBtn = document.getElementById("gearBtn");
+const settingsEl = document.getElementById("settings");
+gearBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  settingsEl.hidden = !settingsEl.hidden;
+  gearBtn.setAttribute("aria-expanded", String(!settingsEl.hidden));
+});
+document.addEventListener("click", (e) => {
+  if (!settingsEl.hidden && !settingsEl.contains(e.target)) settingsEl.hidden = true;
+});
+document.getElementById("th-system").addEventListener("click", () => setTheme("system"));
+document.getElementById("th-light").addEventListener("click", () => setTheme("light"));
+document.getElementById("th-dark").addEventListener("click", () => setTheme("dark"));
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
+
+// ---------- rain + lightning backdrop (subtle, slow) ----------
+(function () {
+  const canvas = document.getElementById("fx");
+  const ctx = canvas.getContext("2d");
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let W = 0, H = 0, drops = [];
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  function makeDrop(top) {
+    return {
+      x: Math.random() * W,
+      y: top ? Math.random() * H : -20 - Math.random() * 80,
+      len: 10 + Math.random() * 14,        // short, subtle streaks
+      speed: 1.2 + Math.random() * 1.6,    // slow fall
+      drift: 0.25 + Math.random() * 0.2,   // slight diagonal
+      alpha: 0.05 + Math.random() * 0.08,  // very faint
+    };
+  }
+  const N_DROPS = Math.round((window.innerWidth * window.innerHeight) / 26000);
+  for (let i = 0; i < Math.max(20, Math.min(70, N_DROPS)); i++) drops.push(makeDrop(true));
+
+  // lightning state
+  let nextFlash = performance.now() + 6000 + Math.random() * 9000;
+  let flash = null;   // { t0, bolt: [x,y,x,y,...] | null }
+
+  function makeBolt() {
+    // jagged polyline from top of screen to ~55-75% height
+    let x = W * (0.25 + Math.random() * 0.5);
+    let y = -10;
+    const pts = [x, y];
+    while (y < H * (0.55 + Math.random() * 0.2)) {
+      x += (Math.random() - 0.5) * 60;
+      y += 24 + Math.random() * 36;
+      pts.push(x, y);
+    }
+    return pts;
+  }
+
+  function frame(now) {
+    ctx.clearRect(0, 0, W, H);
+    const light = document.body.classList.contains("light");
+    const rainColor = light ? "70, 90, 115" : "200, 215, 235";
+
+    // rain
+    for (const d of drops) {
+      d.y += d.speed;
+      d.x += d.drift;
+      if (d.y > H + 20) Object.assign(d, makeDrop(false));
+      if (d.x > W + 20) d.x = -10;
+      ctx.strokeStyle = "rgba(" + rainColor + "," + d.alpha + ")";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.drift * d.len * 0.6, d.y - d.len);
+      ctx.stroke();
+    }
+
+    // lightning
+    if (!flash && now >= nextFlash) {
+      flash = { t0: now, bolt: Math.random() < 0.45 ? makeBolt() : null,
+                second: Math.random() < 0.35, secondAt: now + 140 + Math.random() * 120 };
+      nextFlash = now + 9000 + Math.random() * 12000;
+    }
+    if (flash) {
+      const dt = now - flash.t0;
+      const life = 700;
+      if (dt < life) {
+        // envelope: quick rise, slow fall; optional second pulse
+        let a = dt < 90 ? dt / 90 : Math.max(0, 1 - (dt - 90) / (life - 90));
+        if (flash.second && dt > flash.secondAt)
+          a = Math.max(a, Math.max(0, 1 - (dt - flash.secondAt) / 260));
+        const glow = a * (light ? 0.05 : 0.085);   // very subtle screen flash
+        ctx.fillStyle = "rgba(" + (light ? "90, 110, 140" : "150, 180, 255") + "," + glow + ")";
+        ctx.fillRect(0, 0, W, H);
+        if (flash.bolt) {
+          const ba = a * 0.22;
+          ctx.strokeStyle = "rgba(170, 195, 255," + ba + ")";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(flash.bolt[0], flash.bolt[1]);
+          for (let i = 2; i < flash.bolt.length; i += 2)
+            ctx.lineTo(flash.bolt[i], flash.bolt[i + 1]);
+          ctx.stroke();
+        }
+      } else {
+        flash = null;
+      }
+    }
+
+    requestAnimationFrame(frame);
+  }
+  if (!reduced) requestAnimationFrame(frame);
+})();
+
 // ---------- startup ----------
 (function () {
+  applyTheme();
   const params = new URLSearchParams(location.search);
   const q = params.get("q");
   const t = params.get("t");
