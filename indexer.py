@@ -1,6 +1,12 @@
-"""MiniSearch — indexer.
+"""MiniSearch — indexer v2 (Phase 1 upgrade).
 
-Reads data/pages.jsonl, builds an inverted index, and scores with BM25.
+Reads data/pages.jsonl and builds:
+  - the inverted index (term -> {url: term_frequency}) with document
+    frequency and document lengths, for BM25 ranking
+  - stable document IDs + URL mapping (for future authority ranking)
+  - a link graph (data/links.json) from the crawler's outgoing links,
+    ready for a future PageRank-like authority signal
+
 Saves data/index.json.
 """
 import json
@@ -29,37 +35,44 @@ def tokenize(text):
 
 def build(pages_file="data/pages.jsonl", index_file="data/index.json"):
     docs = {}          # url -> {title, length}
-    postings = {}       # term -> {url: term_frequency}
-    doc_tokens = {}     # url -> token list (kept for snippet search)
+    postings = {}      # term -> {url: term_frequency}
+    pages_meta = []    # (url, links) for the link graph
 
     with open(pages_file, encoding="utf-8") as f:
         for line in f:
             pg = json.loads(line)
             toks = tokenize(pg["title"] + " " + pg["text"])
             docs[pg["url"]] = {"title": pg["title"], "length": len(toks)}
-            doc_tokens[pg["url"]] = toks
             for term, tf in Counter(toks).items():
                 postings.setdefault(term, {})[pg["url"]] = tf
+            pages_meta.append((pg["url"], pg.get("links", [])))
 
     n_docs = len(docs)
     avgdl = sum(d["length"] for d in docs.values()) / n_docs if n_docs else 0
     df = {t: len(p) for t, p in postings.items()}
 
-    # We store doc_tokens separately so the search UI can make snippets
+    # Stable document IDs + URL mapping (future authority signal)
+    doc_ids = {url: i for i, url in enumerate(sorted(docs))}
+
+    # Link graph: url -> outgoing links (normalized, corpus-restricted)
+    links = {url: [l for l in ls if l in docs] for url, ls in pages_meta}
+
     index = {
         "N": n_docs,
         "avgdl": avgdl,
         "docs": docs,
         "df": df,
         "postings": postings,
+        "docIds": doc_ids,
     }
     os.makedirs("data", exist_ok=True)
     with open(index_file, "w", encoding="utf-8") as f:
         json.dump(index, f, ensure_ascii=False)
-    with open("data/doctokens.json", "w", encoding="utf-8") as f:
-        json.dump(doc_tokens, f, ensure_ascii=False)
+    with open("data/links.json", "w", encoding="utf-8") as f:
+        json.dump(links, f, ensure_ascii=False)
 
-    print(f"Indexed {n_docs} pages | vocabulary: {len(postings)} terms | saved {index_file}")
+    print(f"Indexed {n_docs} pages | vocabulary: {len(postings)} terms | "
+          f"link graph: {sum(len(v) for v in links.values())} edges | saved {index_file}")
     return index
 
 
@@ -79,7 +92,7 @@ class BM25:
         qtoks = tokenize(query)
         if not qtoks:
             return []
-        for term in qtoks:
+        for term in set(qtoks):
             plist = self.postings.get(term)
             if not plist:
                 continue
@@ -88,11 +101,11 @@ class BM25:
                 dl = self.docs[url]["length"]
                 denom = tf + self.k1 * (1 - self.b + self.b * dl / self.avgdl)
                 scores[url] = scores.get(url, 0.0) + idf * (tf * (self.k1 + 1) / denom)
-        ranked = sorted(scores.items(), key=lambda x: -x[1])[:top_k]
+        ranked = sorted(scores.items(), key=lambda x: (-x[1], x[0]))[:top_k]
         return ranked
 
 
 if __name__ == "__main__":
     idx = build()
-    bm = BM25(idx)
+    BM25(idx)
     print("Sample ranking check done. Use search.py to query.")
