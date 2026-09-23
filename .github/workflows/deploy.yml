@@ -28,13 +28,18 @@ jobs:
         run: pip install requests beautifulsoup4
 
       - name: Crawl the web
-        run: python crawler.py seeds.txt 30
+        run: python crawler.py seeds.txt 100
+        env:
+          MS_MAX_DEPTH: "2"
 
       - name: Build the index
         run: python indexer.py
 
       - name: Build static site data
         run: python build_static.py
+
+      - name: Run engine tests
+        run: python -m unittest tests.test_engine -v
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
