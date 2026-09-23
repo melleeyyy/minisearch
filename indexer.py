@@ -1,19 +1,27 @@
-"""MiniSearch — indexer v2 (Phase 1 upgrade).
+"""MiniSearch — indexer (Phase 2): builds the SQLite search database.
 
-Reads data/pages.jsonl and builds:
-  - the inverted index (term -> {url: term_frequency}) with document
-    frequency and document lengths, for BM25 ranking
-  - stable document IDs + URL mapping (for future authority ranking)
-  - a link graph (data/links.json) from the crawler's outgoing links,
-    ready for a future PageRank-like authority signal
+Reads data/pages.jsonl (produced by crawler.py) and writes
+data/minisearch.db with:
 
-Saves data/index.json.
+  - pages      — one row per crawled page (+ token length for BM25)
+  - images     — one row per discovered image (source page, alt, size...)
+  - links      — the web link graph (source, target, anchor text, rel)
+  - postings   — inverted index (term, doc_id, term frequency)
+  - meta       — corpus statistics (N, avgdl)
+
+The server (server/engine.py) loads this database into memory at
+startup and answers queries; build_static.py builds the small
+browser-side fallback bundle from it.
 """
 import json
 import math
 import os
 import re
+import sqlite3
 from collections import Counter
+from urllib.parse import urlparse
+
+DB_PATH = os.environ.get("MS_DB", "data/minisearch.db")
 
 # \w alone drops Malayalam combining vowel signs (e.g. the േ in കേരളം),
 # which would split words into fragments — so we include the full Malayalam block.
@@ -33,79 +41,110 @@ def tokenize(text):
     return [t for t in tokens if len(t) > 1 and t not in STOPWORDS]
 
 
-def build(pages_file="data/pages.jsonl", index_file="data/index.json"):
-    docs = {}          # url -> {title, length}
-    postings = {}      # term -> {url: term_frequency}
-    pages_meta = []    # (url, links) for the link graph
+MIME_BY_EXT = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".bmp": "image/bmp", ".avif": "image/avif", ".ico": "image/x-icon",
+}
 
+
+def build(pages_file="data/pages.jsonl", db_path=None):
+    db_path = db_path or DB_PATH
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    if os.path.exists(db_path):
+        os.remove(db_path)
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+    cur.executescript("""
+    CREATE TABLE pages (
+        id INTEGER PRIMARY KEY, url TEXT UNIQUE, canonical_url TEXT,
+        title TEXT, description TEXT, language TEXT, text TEXT,
+        headings TEXT, word_count INTEGER, content_hash TEXT,
+        domain TEXT, status_code INTEGER, crawled_at TEXT,
+        last_modified TEXT, etag TEXT, length INTEGER);
+    CREATE TABLE images (
+        id INTEGER PRIMARY KEY, image_url TEXT UNIQUE, source_id INTEGER,
+        source_url TEXT, domain TEXT, alt TEXT, title TEXT, caption TEXT,
+        width INTEGER, height INTEGER, mime TEXT, source TEXT, crawled_at TEXT);
+    CREATE TABLE links (
+        source_id INTEGER, target_url TEXT, anchor TEXT, rel TEXT);
+    CREATE TABLE postings (
+        term TEXT, doc_id INTEGER, tf INTEGER);
+    CREATE INDEX idx_postings_term ON postings(term);
+    CREATE INDEX idx_links_target ON links(target_url);
+    CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
+    """)
+
+    n_docs = 0
+    total_len = 0
+    seen_images = {}
     with open(pages_file, encoding="utf-8") as f:
         for line in f:
             pg = json.loads(line)
             toks = tokenize(pg["title"] + " " + pg["text"])
-            docs[pg["url"]] = {"title": pg["title"], "length": len(toks)}
-            for term, tf in Counter(toks).items():
-                postings.setdefault(term, {})[pg["url"]] = tf
-            pages_meta.append((pg["url"], pg.get("links", [])))
+            cur.execute(
+                "INSERT INTO pages (url, canonical_url, title, description, language,"
+                " text, headings, word_count, content_hash, domain, status_code,"
+                " crawled_at, last_modified, etag, length) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (pg["url"], pg.get("canonicalUrl", pg["url"]), pg["title"],
+                 pg.get("description", ""), pg.get("language", ""),
+                 pg.get("text", ""), json.dumps(pg.get("headings", []), ensure_ascii=False),
+                 pg.get("wordCount", 0), pg.get("contentHash", ""),
+                 pg.get("domain", ""), pg.get("statusCode", 0),
+                 pg.get("crawledAt", ""), pg.get("lastModified", ""),
+                 pg.get("etag", ""), len(toks)))
+            doc_id = cur.lastrowid
+            n_docs += 1
+            total_len += len(toks)
 
-    n_docs = len(docs)
-    avgdl = sum(d["length"] for d in docs.values()) / n_docs if n_docs else 0
-    df = {t: len(p) for t, p in postings.items()}
+            cur.executemany(
+                "INSERT INTO postings (term, doc_id, tf) VALUES (?,?,?)",
+                [(term, doc_id, tf) for term, tf in Counter(toks).items()])
 
-    # Stable document IDs + URL mapping (future authority signal)
-    doc_ids = {url: i for i, url in enumerate(sorted(docs))}
+            for l in pg.get("links", []):
+                if isinstance(l, dict):
+                    cur.execute(
+                        "INSERT INTO links (source_id, target_url, anchor, rel) VALUES (?,?,?,?)",
+                        (doc_id, l["url"], l.get("anchor", ""), l.get("rel", "")))
 
-    # Link graph: url -> outgoing links (normalized, corpus-restricted)
-    links = {url: [l for l in ls if l in docs] for url, ls in pages_meta}
+            for im in pg.get("images", []):
+                url = im.get("imageUrl")
+                if not url or url in seen_images:
+                    continue
+                seen_images[url] = True
+                ext = os.path.splitext(urlparse(url).path)[1].lower()
+                cur.execute(
+                    "INSERT OR IGNORE INTO images (image_url, source_id, source_url,"
+                    " domain, alt, title, caption, width, height, mime, source, crawled_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (url, doc_id, pg["url"], pg.get("domain", ""),
+                     im.get("alt", ""), im.get("title", ""), im.get("caption", ""),
+                     im.get("width"), im.get("height"),
+                     MIME_BY_EXT.get(ext, ""),
+                     im.get("source", ""), pg.get("crawledAt", "")))
 
-    index = {
-        "N": n_docs,
-        "avgdl": avgdl,
-        "docs": docs,
-        "df": df,
-        "postings": postings,
-        "docIds": doc_ids,
-    }
-    os.makedirs("data", exist_ok=True)
-    with open(index_file, "w", encoding="utf-8") as f:
-        json.dump(index, f, ensure_ascii=False)
-    with open("data/links.json", "w", encoding="utf-8") as f:
-        json.dump(links, f, ensure_ascii=False)
+    avgdl = total_len / n_docs if n_docs else 0
+    cur.execute("INSERT INTO meta (k, v) VALUES ('N', ?)", (str(n_docs),))
+    cur.execute("INSERT INTO meta (k, v) VALUES ('avgdl', ?)", (str(avgdl),))
+    con.commit()
 
-    print(f"Indexed {n_docs} pages | vocabulary: {len(postings)} terms | "
-          f"link graph: {sum(len(v) for v in links.values())} edges | saved {index_file}")
-    return index
+    # quick summary
+    imgs = cur.execute("SELECT COUNT(*) FROM images").fetchone()[0]
+    lnks = cur.execute("SELECT COUNT(*) FROM links").fetchone()[0]
+    terms = cur.execute("SELECT COUNT(DISTINCT term) FROM postings").fetchone()[0]
+    con.close()
+    print(f"Indexed {n_docs} pages | {terms} terms | {imgs} images | "
+          f"{lnks} link edges | saved {db_path}")
+    return db_path
 
 
-class BM25:
-    """Okapi BM25 ranker over the built index."""
-
-    def __init__(self, index, k1=1.5, b=0.75):
-        self.k1, self.b = k1, b
-        self.N = index["N"]
-        self.avgdl = index["avgdl"] or 1
-        self.docs = index["docs"]
-        self.df = index["df"]
-        self.postings = index["postings"]
-
-    def search(self, query, top_k=10):
-        scores = {}
-        qtoks = tokenize(query)
-        if not qtoks:
-            return []
-        for term in set(qtoks):
-            plist = self.postings.get(term)
-            if not plist:
-                continue
-            idf = math.log(1 + (self.N - len(plist) + 0.5) / (len(plist) + 0.5))
-            for url, tf in plist.items():
-                dl = self.docs[url]["length"]
-                denom = tf + self.k1 * (1 - self.b + self.b * dl / self.avgdl)
-                scores[url] = scores.get(url, 0.0) + idf * (tf * (self.k1 + 1) / denom)
-        ranked = sorted(scores.items(), key=lambda x: (-x[1], x[0]))[:top_k]
-        return ranked
+def load_stats(db_path=None):
+    db_path = db_path or DB_PATH
+    con = sqlite3.connect(db_path)
+    meta = dict(con.execute("SELECT k, v FROM meta").fetchall())
+    con.close()
+    return meta
 
 
 if __name__ == "__main__":
-    idx = build()
-    BM25(idx)
-    print("Sample ranking check done. Use search.py to query.")
+    build()

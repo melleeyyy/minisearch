@@ -1,56 +1,56 @@
-"""MiniSearch — build the static site's data bundle.
+"""MiniSearch — build the static fallback bundle for GitHub Pages.
 
-Reads data/pages.jsonl + data/index.json (produced by crawler.py + indexer.py)
-and writes docs/data/search-data.json, which the static web UI fetches.
+Reads the SQLite database (data/minisearch.db, built by indexer.py)
+and writes docs/data/search-data.json — the small browser-side index
+used by the "My index" tab when the Search API is not reachable.
 
 Size optimisations (the browser should not download unnecessary data):
-  - pages are keyed by a compact integer document ID (postings shrink a lot)
-  - page text is truncated for the web bundle (snippets + phrase search
-    only need a window, not the whole article)
-  - df is derived from postings in the browser, not shipped
-  - vocabulary terms without any letter (pure numbers) are dropped
-
-The full crawl metadata and the link graph stay in data/ for the local
-pipeline (future authority ranking).
+  - pages are keyed by a compact integer document ID
+  - page text is truncated (snippets + phrase search only need a window)
+  - vocabulary capped, letter-less terms dropped
 """
 import json
 import os
+import sqlite3
 
-MAX_VOCAB = 30000    # autocomplete / typo-correction vocabulary cap (by df)
-MAX_TEXT = 25000     # characters of body text shipped per page
+DB_PATH = os.environ.get("MS_DB", "data/minisearch.db")
+MAX_VOCAB = 30000
+MAX_TEXT = 25000
 
 
 def main():
     os.makedirs("docs/data", exist_ok=True)
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
 
-    pages = {}
-    with open("data/pages.jsonl", encoding="utf-8") as f:
-        for line in f:
-            pg = json.loads(line)
-            pages[pg["url"]] = {
-                "title": pg.get("title", pg["url"]),
-                "description": pg.get("description", ""),
-                "language": pg.get("language", ""),
-                "text": pg.get("text", "")[:MAX_TEXT],
-                "headings": pg.get("headings", []),
-            }
+    rows = con.execute(
+        "SELECT url, title, description, language, text, headings, length"
+        " FROM pages ORDER BY url").fetchall()
+    meta = dict(con.execute("SELECT k, v FROM meta").fetchall())
+    con.close()
 
-    index = json.load(open("data/index.json", encoding="utf-8"))
-
-    # stable integer IDs (same order as the indexer's docIds)
-    urls = sorted(pages.keys())
+    pages = [{"title": r["title"] or r["url"],
+              "description": r["description"] or "",
+              "language": r["language"] or "",
+              "text": (r["text"] or "")[:MAX_TEXT],
+              "headings": json.loads(r["headings"] or "[]")} for r in rows]
+    urls = [r["url"] for r in rows]
+    docs = [[r["title"] or r["url"], r["length"]] for r in rows]
     url_to_id = {u: i for i, u in enumerate(urls)}
 
-    docs = [[pages[u]["title"], index["docs"][u]["length"]] for u in urls]
-    web_pages = [pages[u] for u in urls]
-
-    # postings: term -> {docId: term_frequency}
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    raw_to_id = {}
+    for r in con.execute("SELECT id, url FROM pages"):
+        if r["url"] in url_to_id:
+            raw_to_id[r["id"]] = url_to_id[r["url"]]
     web_postings = {}
-    for term, plist in index["postings"].items():
-        web_postings[term] = {url_to_id[u]: tf for u, tf in plist.items()
-                              if u in url_to_id}
+    for term, doc_id, tf in con.execute("SELECT term, doc_id, tf FROM postings"):
+        bid = raw_to_id.get(doc_id)
+        if bid is not None:
+            web_postings.setdefault(term, {})[bid] = tf
+    con.close()
 
-    # vocabulary: most frequent terms first; keep only terms with a letter
     def has_letter(t):
         return any(c.isalpha() for c in t)
 
@@ -59,11 +59,11 @@ def main():
 
     bundle = {
         "N": len(urls),
-        "avgdl": index["avgdl"],
+        "avgdl": float(meta.get("avgdl", 1)) or 1,
         "urls": urls,
-        "docs": docs,          # id -> [title, bodyLength]
-        "postings": web_postings,   # term -> {id: tf}
-        "pages": web_pages,    # id -> {title, description, language, text, headings}
+        "docs": docs,
+        "postings": web_postings,
+        "pages": pages,
         "vocab": vocab,
     }
     out = "docs/data/search-data.json"
