@@ -41,8 +41,9 @@
           justify-content: center; padding: 20px; }
   .home .brand { font-size: 56px; margin-bottom: 30px; }
   form { width: 100%; max-width: 560px; }
-  .box { display: flex; align-items: center; gap: 10px; background: var(--bg-soft);
-         border: 1px solid var(--line); border-radius: 26px; padding: 13px 20px;
+  .box { position: relative; display: flex; align-items: center; gap: 10px;
+         background: var(--bg-soft); border: 1px solid var(--line);
+         border-radius: 26px; padding: 13px 20px;
          transition: border-color .15s, box-shadow .15s; }
   .box:hover { border-color: #3a3e42; }
   body.light .box:hover { border-color: #b9bec4; }
@@ -56,6 +57,18 @@
         border-radius: 50%; }
   .go:hover { color: var(--blue); }
   .go svg { width: 20px; height: 20px; }
+
+  /* ---- autocomplete dropdown ---- */
+  #ac { position: absolute; top: calc(100% + 8px); left: 0; right: 0;
+        background: var(--bg-soft); border: 1px solid var(--line);
+        border-radius: 16px; padding: 6px; z-index: 40; max-height: 330px;
+        overflow-y: auto; box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+  body.light #ac { box-shadow: 0 10px 30px rgba(0, 0, 0, .18); }
+  #ac[hidden] { display: none; }
+  .ac-item { padding: 9px 14px; font-size: 15px; border-radius: 9px;
+             cursor: pointer; color: var(--text); white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
+  .ac-item:hover, .ac-item.active { background: var(--card); color: var(--blue); }
 
   /* ---- settings ---- */
   .gear { position: fixed; top: 14px; right: 16px; z-index: 20;
@@ -95,6 +108,10 @@
          white-space: nowrap; border-radius: 8px 8px 0 0; }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 500; }
+  .dym { color: var(--text-soft); font-size: 14px; padding: 12px 30px 0;
+         max-width: 640px; margin: 0 auto; }
+  .dym[hidden] { display: none; }
+  .dym a { color: var(--blue); font-style: italic; cursor: pointer; }
   .stat { color: var(--text-soft); font-size: 13px; padding: 10px 30px 2px;
           max-width: 640px; margin: 0 auto; }
   .container { max-width: 640px; padding: 8px 30px 60px; margin: 0 auto; width: 100%; }
@@ -105,12 +122,12 @@
          align-items: center; gap: 6px; max-width: 100%; overflow: hidden;
          text-overflow: ellipsis; white-space: nowrap; }
   .badge { background: var(--card); border-radius: 5px; padding: 1px 7px;
-           font-size: 11px; color: var(--green); font-weight: 500; }
+           font-size: 11px; color: var(--green); font-weight: 500; flex: none; }
   h3 a { color: var(--blue); font-size: 19px; text-decoration: none; font-weight: 400; }
   h3 a:hover { text-decoration: underline; }
   .result p { color: var(--text-soft); font-size: 14px; line-height: 1.58; margin-top: 4px; }
   .result p b { font-weight: 700; color: var(--text); }
-  .score { color: var(--text-soft); font-size: 11px; }
+  .meta { color: var(--text-soft); font-size: 11.5px; margin-top: 3px; }
 
   /* news cards */
   .news-card { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
@@ -153,7 +170,8 @@
     <div class="brand"><span class="m">Mini</span><span class="s">Search</span></div>
     <form id="sf" action="#" method="get" autocomplete="off">
       <div class="box">
-        <input type="text" id="q" name="q" placeholder="Search" autofocus>
+        <input type="text" id="q" name="q" placeholder="Search" autofocus
+               aria-autocomplete="list">
         <button type="submit" class="go" title="Search" aria-label="Search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round">
@@ -161,6 +179,7 @@
             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
         </button>
+        <div id="ac" hidden></div>
       </div>
     </form>
   </div>
@@ -172,6 +191,7 @@
     <button class="tab" id="tab-index" onclick="switchTab('index')">My index</button>
   </div>
 </div>
+<div id="dym" class="dym" hidden></div>
 <div id="stat" class="stat" hidden></div>
 <div id="results" class="container" hidden></div>
 <div id="sentinel" hidden></div>
@@ -198,7 +218,7 @@
 //   images — Wikimedia Commons images
 //   videos — Wikimedia Commons videos (playable)
 //   news   — GDELT 2.0 live global news, Wikipedia fallback
-//   index  — own crawled pages + BM25, in-browser
+//   index  — own crawled pages + BM25 + field boosts, in-browser
 
 let TAB = "web";
 let CURRENT_Q = "";
@@ -218,13 +238,16 @@ function esc(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+function escapeRe(t) {
+  return t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function updateStat(prefix) {
   const el = document.getElementById("stat");
   el.hidden = false;
   el.textContent = prefix + TOTAL_SHOWN + " results";
 }
 
-// ---------- BM25 (our own index) ----------
+// ---------- tokenization (shared with the Python pipeline) ----------
 const STOPWORDS = new Set(["ഒരു","ഈ","ആ","അത്","ഇത്","അവർ","ന്റെ","യും","ആണ്","ഉണ്ട്",
   "ചെയ്ത","വേണം","കൊണ്ട്","എന്ന","മറ്റ്","വളരെ","പിന്നീട്","ഇവിടെ",
   "the","a","an","of","and","in","to","is","are","was","for","on","with","as","by",
@@ -241,6 +264,18 @@ function tokenize(text) {
   return out;
 }
 
+// ---------- query parsing: quoted phrases + terms ----------
+function parseQuery(q) {
+  // accept both straight quotes and curly mobile quotes
+  const qq = q.replace(/[“”«»]/g, '"');
+  const phrases = [];
+  const rest = qq.replace(/"([^"]+)"/g, (m, p1) => {
+    if (p1.trim()) phrases.push(p1.trim());
+    return " ";
+  });
+  return { phrases: phrases, terms: tokenize(rest) };
+}
+
 const K1 = 1.5, B = 0.75;
 
 async function loadIndex() {
@@ -254,37 +289,154 @@ async function loadIndex() {
   return INDEX_DATA;
 }
 
-function bm25Search(query, topK = 200) {
-  const qtoks = tokenize(query);
-  if (!qtoks.length || !INDEX_DATA) return [];
-  const { N, avgdl, docs, postings } = INDEX_DATA;
+// ---------- ranking config (My index tab) ----------
+// Starting points — tune through testing, don't treat as magic numbers.
+const RANK = {
+  titleExact: 10,   // a query term equals the whole title
+  titlePartial: 5,  // a query term appears inside the title
+  heading: 4,       // a query term appears in an h1-h3
+  url: 3,           // a query term appears in the URL
+  phrase: 8         // an exact quoted phrase occurs in the text
+};
+
+// BM25 + field boosts + phrase matching over our own corpus.
+// Returns [[docId, score], ...] sorted by score desc, then id asc
+// (deterministic tie-break).
+function indexSearch(query, topK = 200) {
+  if (!INDEX_DATA) return [];
+  const { N, avgdl, docs, postings, pages, urls } = INDEX_DATA;
+  const { phrases, terms } = parseQuery(query);
   const dl = avgdl || 1;
   const scores = {};
-  for (const term of qtoks) {
+
+  // 1) BM25 body scoring
+  for (const term of new Set(terms)) {
     const plist = postings[term];
     if (!plist) continue;
-    const idf = Math.log(1 + (N - Object.keys(plist).length + 0.5) /
-                         (Object.keys(plist).length + 0.5));
-    for (const [url, tf] of Object.entries(plist)) {
-      const denom = tf + K1 * (1 - B + B * (docs[url].length / dl));
-      scores[url] = (scores[url] || 0) + idf * (tf * (K1 + 1) / denom);
+    const n = Object.keys(plist).length;
+    const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
+    for (const id in plist) {
+      const tf = plist[id];
+      const denom = tf + K1 * (1 - B + B * (docs[id][1] / dl));
+      scores[id] = (scores[id] || 0) + idf * (tf * (K1 + 1) / denom);
     }
   }
-  return Object.entries(scores).sort((a, b) => b[1] - a[1]).slice(0, topK);
+
+  // 2) exact-phrase containment (+boost)
+  const phraseHits = new Set();
+  for (const ph of phrases) {
+    const lph = ph.toLowerCase();
+    for (let id = 0; id < pages.length; id++) {
+      if ((pages[id].text || "").toLowerCase().includes(lph))
+        phraseHits.add(String(id));
+    }
+  }
+  for (const id of phraseHits) scores[id] = (scores[id] || 0) + RANK.phrase;
+
+  if (!Object.keys(scores).length) return [];
+
+  // 3) field boosts: title / heading / URL
+  for (const id of Object.keys(scores)) {
+    const pg = pages[id];
+    const title = (pg.title || "").toLowerCase();
+    const heading = (pg.headings || []).join(" ").toLowerCase();
+    const urlL = urls[id].toLowerCase();
+    let s = scores[id];
+    for (const t of new Set(terms)) {
+      if (title === t) s += RANK.titleExact;
+      else if (title.includes(t)) s += RANK.titlePartial;
+      if (heading.includes(t)) s += RANK.heading;
+      if (urlL.includes(t)) s += RANK.url;
+    }
+    scores[id] = s;
+  }
+
+  // 4) phrase-only query -> keep only pages that actually contain it
+  if (!terms.length && phrases.length) {
+    for (const id of Object.keys(scores)) {
+      if (!phraseHits.has(id)) delete scores[id];
+    }
+  }
+
+  return Object.entries(scores)
+    .map(([id, s]) => [+id, s])
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .slice(0, topK);
 }
 
-function snippet(text, qtoks, width = 260) {
-  const lower = text.toLowerCase();
-  let pos = -1;
-  for (const t of qtoks) { pos = lower.indexOf(t); if (pos >= 0) break; }
-  if (pos < 0) return esc(text.slice(0, width));
-  let start = Math.max(0, pos - Math.floor(width / 3));
+// ---------- snippets: densest window, not the first characters ----------
+function bestSnippet(text, terms, phrases, width = 240) {
+  const lower = (text || "").toLowerCase();
+  const needles = [...terms, ...phrases].map(t => t.toLowerCase())
+    .filter(t => t.length > 1);
+  const positions = [];
+  for (const n of needles) {
+    let i = lower.indexOf(n);
+    while (i !== -1 && positions.length < 600) {
+      positions.push(i);
+      i = lower.indexOf(n, i + 1);
+    }
+  }
+  let start = 0;
+  if (positions.length) {
+    positions.sort((a, b) => a - b);
+    let bestStart = positions[0], bestCount = 0, j = 0;
+    for (let i = 0; i < positions.length; i++) {
+      while (positions[i] - positions[j] > 150) j++;
+      if (i - j + 1 > bestCount) { bestCount = i - j + 1; bestStart = positions[j]; }
+    }
+    start = Math.max(0, bestStart - 30);
+  }
   let snip = text.slice(start, start + width);
   if (start > 0) snip = "…" + snip;
   if (start + width < text.length) snip += "…";
-  const pat = new RegExp("(" + qtoks.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-                                 .join("|") + ")", "gi");
+  if (!needles.length) return esc(snip);
+  const pat = new RegExp("(" + needles.map(escapeRe).join("|") + ")", "gi");
   return esc(snip).replace(pat, "<b>$1</b>");
+}
+
+// ---------- typo tolerance (Did you mean) ----------
+function levenshtein(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const v0 = new Array(b.length + 1), v1 = new Array(b.length + 1);
+  for (let i = 0; i <= b.length; i++) v0[i] = i;
+  for (let i = 0; i < a.length; i++) {
+    v1[0] = i + 1;
+    let rowMin = v1[0];
+    for (let j = 0; j < b.length; j++) {
+      v1[j + 1] = Math.min(v0[j + 1] + 1, v1[j] + 1, v0[j] + (a[i] === b[j] ? 0 : 1));
+      if (v1[j + 1] < rowMin) rowMin = v1[j + 1];
+    }
+    if (rowMin > max) return max + 1;   // early exit
+    for (let j = 0; j <= b.length; j++) v0[j] = v1[j];
+  }
+  return v0[b.length];
+}
+
+// Best vocabulary correction for an unknown term, or null.
+function typoCorrection(term) {
+  const vocab = (INDEX_DATA && INDEX_DATA.vocab) || [];
+  let best = null, bestD = 3;
+  for (const t of vocab) {
+    if (Math.abs(t.length - term.length) > 2) continue;
+    const d = levenshtein(term, t, 2);
+    if (d < bestD) { bestD = d; best = t; }
+  }
+  return bestD <= 2 ? best : null;
+}
+
+function showDYM(text) {
+  const el = document.getElementById("dym");
+  if (!text) { el.hidden = true; el.textContent = ""; return; }
+  el.hidden = false;
+  el.textContent = "Did you mean: ";
+  const a = document.createElement("a");
+  a.textContent = text;
+  a.addEventListener("click", (e) => {
+    e.preventDefault();
+    go(text);
+  });
+  el.appendChild(a);
 }
 
 // ---------- Web: MediaWiki search (sroffset paging) ----------
@@ -389,10 +541,10 @@ function fetchNewsPage(q, page) {
   return Promise.resolve(NEWS_POOL.slice(start, start + perPage));
 }
 
-// ---------- Index: BM25 pool ----------
+// ---------- Index: field-boosted BM25 pool ----------
 async function fetchIndexPool(q) {
   await loadIndex();
-  return INDEX_DATA ? bm25Search(q) : [];
+  return indexSearch(q);
 }
 
 function fetchIndexPage(q, page) {
@@ -442,17 +594,20 @@ function newsResultNode(r) {
   return div;
 }
 
-function indexResultNode(item, qtoks) {
-  const [url, score] = item;
-  const pg = INDEX_DATA.pages[url] || { title: url, text: "" };
+function indexResultNode(item, query) {
+  const [id] = item;
+  const pg = INDEX_DATA.pages[id] || { title: "", text: "" };
+  const url = INDEX_DATA.urls[id];
+  const { phrases, terms } = parseQuery(query);
   const div = document.createElement("div");
   div.className = "result";
   div.innerHTML =
     '<div class="src"><span class="badge">index</span> ' + esc(url) + "</div>" +
     '<h3><a href="' + esc(url) + '" target="_blank" rel="noopener">' +
     esc(pg.title) + "</a></h3>" +
-    "<p>" + snippet(pg.text, qtoks) + "</p>" +
-    '<span class="score">BM25 ' + score.toFixed(2) + "</span>";
+    "<p>" + bestSnippet(pg.text, terms, phrases) + "</p>" +
+    '<div class="meta">' + esc(pg.language || "") +
+    (pg.description ? " · " + esc(pg.description.slice(0, 110)) : "") + "</div>";
   return div;
 }
 
@@ -511,7 +666,7 @@ function appendResults(tab, items) {
     else if (tab === "news") node = newsResultNode(r);
     else if (tab === "images") node = imageCardNode(r);
     else if (tab === "videos") node = videoCardNode(r);
-    else if (tab === "index") node = indexResultNode(r, tokenize(CURRENT_Q));
+    else if (tab === "index") node = indexResultNode(r, CURRENT_Q);
     if (node) target.appendChild(node);
   }
   TOTAL_SHOWN += items.length;
@@ -526,6 +681,7 @@ async function runSearch(q, tab) {
   TOTAL_SHOWN = 0;
   NEWS_POOL = null;
   INDEX_POOL = null;
+  showDYM(null);
 
   document.getElementById("sentinel").hidden = true;
 
@@ -540,6 +696,15 @@ async function runSearch(q, tab) {
   box.innerHTML = "";
 
   if (!items.length) {
+    // typo suggestion: "Did you mean: …" (own index only)
+    if (tab === "index" && INDEX_DATA) {
+      const { terms } = parseQuery(q);
+      const unknown = terms.filter(t => !INDEX_DATA.postings[t]);
+      if (unknown.length) {
+        const corrected = terms.map(t => INDEX_DATA.postings[t] ? t : (typoCorrection(t) || t));
+        if (corrected.join(" ") !== terms.join(" ")) showDYM(corrected.join(" "));
+      }
+    }
     box.innerHTML = '<div class="empty">No results</div>';
     return;
   }
@@ -600,8 +765,112 @@ function go(q) {
 
 document.getElementById("sf").addEventListener("submit", (e) => {
   e.preventDefault();
+  hideAc();
   go(document.getElementById("q").value.trim());
 });
+
+// ---------- autocomplete (local index only, no network) ----------
+const AC = { items: [], active: -1, timer: null, titles: null };
+
+function acSuggest(value) {
+  const v = value.trim().toLowerCase();
+  if (!v || !INDEX_DATA) return [];
+  if (!AC.titles) {
+    AC.titles = Object.values(INDEX_DATA.pages || {})
+      .map(p => p.title).filter(Boolean);
+  }
+  const parts = v.split(/\s+/);
+  const last = parts[parts.length - 1];
+  const base = v.slice(0, v.length - last.length);
+  const out = [], seen = new Set();
+
+  // 1) whole-page-title completions (a word of the title starts the query)
+  if (parts.length === 1) {
+    for (const t of AC.titles) {
+      if (out.length >= 4) break;
+      const l = t.toLowerCase();
+      if (l.startsWith(v) && !seen.has(l)) { seen.add(l); out.push(t); }
+    }
+  }
+  // 2) vocabulary completions of the last word (most frequent first)
+  for (const term of (INDEX_DATA.vocab || [])) {
+    if (out.length >= 8) break;
+    if (term.startsWith(last) && term !== last && !seen.has(term)) {
+      seen.add(term);
+      out.push(base + term);
+    }
+  }
+  return out;
+}
+
+function renderAc(items) {
+  const box = document.getElementById("ac");
+  AC.items = items;
+  AC.active = -1;
+  if (!items.length) { box.hidden = true; box.textContent = ""; return; }
+  box.textContent = "";
+  items.forEach((s, i) => {
+    const d = document.createElement("div");
+    d.className = "ac-item";
+    d.textContent = s;
+    // pointerdown (not click) so the input's blur can't swallow it
+    d.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      applySuggestion(s);
+    });
+    box.appendChild(d);
+  });
+  box.hidden = false;
+}
+
+function hideAc() {
+  const box = document.getElementById("ac");
+  box.hidden = true;
+  AC.items = [];
+  AC.active = -1;
+}
+
+function applySuggestion(s) {
+  document.getElementById("q").value = s;
+  hideAc();
+  go(s);
+}
+
+const qInput = document.getElementById("q");
+qInput.addEventListener("input", () => {
+  loadIndex();   // fire and forget; suggestions appear once loaded
+  clearTimeout(AC.timer);
+  AC.timer = setTimeout(() => {
+    const v = qInput.value;
+    if (!v.trim()) { hideAc(); return; }
+    renderAc(acSuggest(v));
+  }, 120);   // debounce — no expensive work per keystroke
+});
+
+qInput.addEventListener("keydown", (e) => {
+  const box = document.getElementById("ac");
+  if (box.hidden || !AC.items.length) {
+    if (e.key === "Escape") hideAc();
+    return;
+  }
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const n = AC.items.length;
+    AC.active = e.key === "ArrowDown"
+      ? (AC.active + 1) % n
+      : (AC.active <= 0 ? n - 1 : AC.active - 1);
+    [...box.children].forEach((el, i) => el.classList.toggle("active", i === AC.active));
+    const act = box.children[AC.active];
+    if (act) act.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter" && AC.active >= 0) {
+    e.preventDefault();
+    applySuggestion(AC.items[AC.active]);
+  } else if (e.key === "Escape") {
+    hideAc();
+  }
+});
+
+qInput.addEventListener("blur", () => setTimeout(hideAc, 150));
 
 // "/" focuses the search box
 document.addEventListener("keydown", (e) => {
