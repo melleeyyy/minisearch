@@ -214,8 +214,8 @@
 <script>
 // ================= MiniSearch =================
 // Tabs (all load more results silently as you scroll):
-//   web    — Wikipedia language editions (MediaWiki API)
-//   images — Wikimedia Commons images
+//   web    — MiniSearch web index (Search API), Wikipedia fallback
+//   images — MiniSearch image index (Search API), Commons fallback
 //   videos — Wikimedia Commons videos (playable)
 //   news   — GDELT 2.0 live global news, Wikipedia fallback
 //   index  — own crawled pages + BM25 + field boosts, in-browser
@@ -266,7 +266,7 @@ function tokenize(text) {
 
 // ---------- query parsing: quoted phrases + terms ----------
 function parseQuery(q) {
-  // accept both straight quotes and curly mobile quotes
+  // accept both straight quotes "…" and curly mobile quotes “…”
   const qq = q.replace(/[“”«»]/g, '"');
   const phrases = [];
   const rest = qq.replace(/"([^"]+)"/g, (m, p1) => {
@@ -439,7 +439,35 @@ function showDYM(text) {
   el.appendChild(a);
 }
 
-// ---------- Web: MediaWiki search (sroffset paging) ----------
+// ---------- Search API (Phase 2) ----------
+// Bases are tried in order: "" = same origin (local dev / single-service
+// deploy), then the remote API (edit this after deploying, e.g. Render).
+// If no API answers, every tab falls back to the public live APIs
+// (Wikipedia / Wikimedia Commons / GDELT) and the local browser index.
+const API_BASES = ["", "https://minisearch-api.onrender.com"];
+let API_BASE = null;      // cached working base (null = none confirmed yet)
+let API_META = null;      // last API response metadata (did_you_mean, total)
+
+async function apiFetch(path, params, timeoutMs = 6000) {
+  const bases = API_BASE !== null ? [API_BASE] : API_BASES;
+  for (const base of bases) {
+    const qs = new URLSearchParams(params).toString();
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(base + path + "?" + qs, { signal: ctrl.signal });
+      clearTimeout(t);
+      if (res.ok) {
+        const data = await res.json();
+        API_BASE = base;
+        return data;
+      }
+    } catch (e) { clearTimeout(t); }
+  }
+  return null;
+}
+
+// ---------- Web: MiniSearch index first, Wikipedia fallback ----------
 const WIKIS = ["en", "ml", "hi", "ta"];
 
 async function wikiSearch(lang, q, limit, offset) {
@@ -459,6 +487,23 @@ async function wikiSearch(lang, q, limit, offset) {
 }
 
 async function fetchWebPage(q, page) {
+  // 1) our own web index via the Search API
+  const r = await apiFetch("/api/search", { q: q, page: page + 1, limit: 16 });
+  if (r && Array.isArray(r.results)) {
+    API_META = r;
+    return r.results.map(x => ({
+      title: x.title,
+      snippet: x.snippet,       // server-side: HTML-escaped + <b> highlight
+      url: x.url,
+      lang: x.domain,
+    }));
+  }
+  API_META = null;
+  // 2) fallback: live Wikipedia search (sroffset paging)
+  return wikiFallbackPage(q, page);
+}
+
+async function wikiFallbackPage(q, page) {
   const perWiki = 4;
   const offset = page * perWiki;
   const lists = await Promise.allSettled(
@@ -472,8 +517,18 @@ async function fetchWebPage(q, page) {
   return out;
 }
 
-// ---------- Images: Wikimedia Commons ----------
+// ---------- Images: MiniSearch image index first, Commons fallback ----------
 async function fetchImagesPage(q, page) {
+  // 1) our own image index via the Search API
+  const r = await apiFetch("/api/images", { q: q, page: page + 1, limit: 24 });
+  if (r && Array.isArray(r.results)) {
+    return r.results.map(x => ({
+      title: x.alt || x.title || x.domain || "image",
+      thumb: x.imageUrl,          // original image URL (not re-hosted)
+      page: x.sourcePageUrl,      // click goes to the source page
+    }));
+  }
+  // 2) fallback: Wikimedia Commons search
   const limit = 24;
   const url = "https://commons.wikimedia.org/w/api.php?action=query&format=json" +
     "&origin=*&generator=search&gsrsearch=" + encodeURIComponent(q) +
@@ -696,7 +751,7 @@ async function runSearch(q, tab) {
   box.innerHTML = "";
 
   if (!items.length) {
-    // typo suggestion: "Did you mean: …" (own index only)
+    // typo suggestion: "Did you mean: …" (own index + web API)
     if (tab === "index" && INDEX_DATA) {
       const { terms } = parseQuery(q);
       const unknown = terms.filter(t => !INDEX_DATA.postings[t]);
@@ -705,6 +760,8 @@ async function runSearch(q, tab) {
         if (corrected.join(" ") !== terms.join(" ")) showDYM(corrected.join(" "));
       }
     }
+    if (tab === "web" && API_META && API_META.did_you_mean)
+      showDYM(API_META.did_you_mean);
     box.innerHTML = '<div class="empty">No results</div>';
     return;
   }
@@ -769,7 +826,7 @@ document.getElementById("sf").addEventListener("submit", (e) => {
   go(document.getElementById("q").value.trim());
 });
 
-// ---------- autocomplete (local index only, no network) ----------
+// ---------- autocomplete (server API first, local index fallback) ----------
 const AC = { items: [], active: -1, timer: null, titles: null };
 
 function acSuggest(value) {
@@ -838,11 +895,18 @@ function applySuggestion(s) {
 
 const qInput = document.getElementById("q");
 qInput.addEventListener("input", () => {
-  loadIndex();   // fire and forget; suggestions appear once loaded
+  loadIndex();   // fire and forget; local suggestions appear once loaded
   clearTimeout(AC.timer);
-  AC.timer = setTimeout(() => {
+  AC.timer = setTimeout(async () => {
     const v = qInput.value;
     if (!v.trim()) { hideAc(); return; }
+    // 1) server-side suggestions (Search API), if reachable
+    const r = await apiFetch("/api/suggest", { q: v }, 1500);
+    if (r && Array.isArray(r.suggestions) && r.suggestions.length) {
+      renderAc(r.suggestions.slice(0, 8));
+      return;
+    }
+    // 2) local fallback: own vocabulary + titles
     renderAc(acSuggest(v));
   }, 120);   // debounce — no expensive work per keystroke
 });
