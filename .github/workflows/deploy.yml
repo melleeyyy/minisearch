@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write      # needed to commit the built index database back
   pages: write
   id-token: write
 
@@ -25,21 +25,34 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests beautifulsoup4
+        run: pip install requests beautifulsoup4 flask
 
-      - name: Crawl the web
-        run: python crawler.py seeds.txt 100
+      - name: Crawl the web (general multi-domain crawl)
+        run: python crawler.py seeds.txt 300
         env:
           MS_MAX_DEPTH: "2"
+          MS_MAX_PAGES_PER_DOMAIN: "50"
 
-      - name: Build the index
+      - name: Build the index (SQLite)
         run: python indexer.py
 
       - name: Build static site data
         run: python build_static.py
 
-      - name: Run engine tests
-        run: python -m unittest tests.test_engine -v
+      - name: Run engine + API tests
+        run: python -m unittest tests.test_engine tests.test_api -v
+
+      - name: Commit index database back (for the Search API deploy)
+        run: |
+          git config user.name "minisearch-bot"
+          git config user.email "actions@github.com"
+          git add data/minisearch.db docs/data/search-data.json
+          if git diff --cached --quiet; then
+            echo "no data changes"
+          else
+            git commit -m "data: rebuilt index [skip ci]"
+            git push
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

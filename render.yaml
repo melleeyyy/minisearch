@@ -1,0 +1,23 @@
+# Render Blueprint — deploy the MiniSearch Search API as a free web service.
+#
+# How to use:
+#   1. Push this repo to GitHub (done).
+#   2. On https://dashboard.render.com  ->  New  ->  Blueprint
+#   3. Select this repository. Render reads this file and creates the service.
+#   4. After it is live, copy the service URL (https://<name>.onrender.com)
+#      into docs/index.html (API_BASES) so the GitHub Pages frontend uses it.
+services:
+  - type: web
+    name: minisearch-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r server/requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 60 server.app:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: SEARCH_CACHE_TTL
+        value: "60"
+      - key: MS_RATE_LIMIT
+        value: "60"

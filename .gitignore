@@ -1,0 +1,11 @@
+# MiniSearch — what NOT to commit (the index database IS committed,
+# so the Search API deploy has data to serve)
+data/pages.jsonl
+data/index.json
+data/doctokens.json
+data/links.json
+data/analytics.db
+data/test.db
+__pycache__/
+*.pyc
+node_modules/

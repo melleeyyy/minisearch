@@ -1,12 +1,31 @@
-# Seed URLs — one per line. The crawler stays on these domains.
-# Malayalam Wikipedia
+# Seed URLs — one per line. The crawler stays on these domains
+# (focused multi-domain crawl). robots.txt is always respected.
+# Per-domain page limit: MS_MAX_PAGES_PER_DOMAIN (default 60).
+
+# --- Malayalam Wikipedia ---
 https://ml.wikipedia.org/wiki/കേരളം
 https://ml.wikipedia.org/wiki/ഇന്ത്യ
 https://ml.wikipedia.org/wiki/തിരുവനന്തപുരം
 https://ml.wikipedia.org/wiki/കൊച്ചി
-# English Wikipedia
+
+# --- English Wikipedia ---
 https://en.wikipedia.org/wiki/Search_engine
-https://en.wikipedia.org/wiki/Google_Search
 https://en.wikipedia.org/wiki/Kerala
-# ISRO
+
+# --- MDN Web Docs (javascript / web tutorials) ---
+https://developer.mozilla.org/en-US/docs/Web/JavaScript
+
+# --- Python documentation (tutorials) ---
+https://docs.python.org/3/tutorial/
+
+# --- Python.org ---
+https://www.python.org/about/
+
+# --- ISRO ---
 https://www.isro.gov.in/
+
+# --- W3C (web standards) ---
+https://www.w3.org/standards/
+
+# --- Internet Archive / Wayback overview ---
+https://archive.org/about/
