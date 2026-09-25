@@ -1,5 +1,8 @@
 name: Keep Search API awake
 
+# DISABLED: renamed to *.disabled so GitHub Actions never runs this
+# workflow. Rename back to keepalive.yml to re-enable.
+#
 # Render's free tier spins a service down after 15 minutes without
 # inbound traffic. This workflow pings the /health endpoint every 5
 # minutes (GitHub Actions' minimum schedule interval) so the MiniSearch

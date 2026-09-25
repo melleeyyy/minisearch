@@ -1,5 +1,8 @@
 name: Deploy MiniSearch to GitHub Pages
 
+# DISABLED: renamed to *.disabled so GitHub Actions never runs this
+# workflow. Rename back to deploy.yml to re-enable.
+
 on:
   push:
     branches: [main]
