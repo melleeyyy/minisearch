@@ -2,8 +2,6 @@
 
 A small, honest search engine — with a dark, minimal, mobile-first web UI that also works great on tablet and desktop.
 
-**Live site:** https://melleeyyy.github.io/minisearch/
-
 This repo is the web frontend. The actual search happens in the [backend](https://github.com/melleeyyy/minisearch-core) — crawler, inverted index, BM25 ranking and C++ acceleration. The original Python engine that started the project is kept at [minisearch-engine](https://github.com/melleeyyy/minisearch-engine).
 
 ## What you can do
