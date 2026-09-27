@@ -1,46 +1,39 @@
-# MiniSearch Frontend
+# MiniSearch
 
-The public web frontend for [MiniSearch](https://github.com/melleeyyy/minisearch-core) —
-a small, honest search engine. Dark, minimal, mobile-first; works on tablet and
-desktop too.
+A small, honest search engine — with a dark, minimal, mobile-first web UI that also works great on tablet and desktop.
 
-**Live:** https://melleeyyy.github.io/minisearch-frontend/
+**Live site:** https://melleeyyy.github.io/minisearch/
 
-## What it does
+This repo is the web frontend. The actual search happens in the [backend](https://github.com/melleeyyy/minisearch-core) — crawler, inverted index, BM25 ranking and C++ acceleration. The original Python engine that started the project is kept at [minisearch-engine](https://github.com/melleeyyy/minisearch-engine).
 
-- **Web search** — BM25-ranked results with highlighted snippets, did-you-mean,
-  pagination, autocomplete suggestions.
-- **Images** — the engine's own image index. Images are never re-hosted; each
-  card links to the original image and its source page.
+## What you can do
+
+- **Web search** — BM25-ranked results with highlighted snippets, autocomplete suggestions, did-you-mean corrections and pagination.
+- **Images** — the engine's own image index. Images are never re-hosted; each card links to the original image and its source page.
 - **Videos** — proxied Wikimedia Commons video search.
-- **Answers** — extractive question answering with confidence, citations and
-  conflict warnings. No AI generation: answers are quoted word-for-word from
-  indexed pages.
-- **Notifications** — live engine status: index size, scoring engine, indexed
-  sources.
-- **Activity** — your recent searches (stored only on this device) plus
-  anonymous engine analytics.
+- **Answers** — extractive question answering with confidence scores, citations and conflict warnings. No AI generation: answers are quoted word-for-word from indexed pages.
+- **Status** — live engine info: index size, scoring engine, indexed sources.
+- **Activity** — your recent searches (stored only on your device) plus anonymous engine analytics.
 
 ## Tech
 
-- [Vite](https://vitejs.dev) + React 18 + TypeScript
-- react-router (hash router, so deep links work on GitHub Pages)
-- No UI framework — a single hand-written dark stylesheet (`src/styles/global.css`)
+Vite + React 18 + TypeScript. Hash-based routing, so deep links work on GitHub Pages. No UI framework — a single hand-written dark stylesheet (`src/styles/global.css`).
 
-## Development
+## Run it locally
 
 ```bash
 npm install
 npm run dev          # http://localhost:5173
 npm run build        # type-check + production bundle in dist/
-npm run preview      # serve the production build locally
+npm run preview      # serve the built site locally
 ```
 
-The API base URL defaults to the live backend and can be overridden with
-`VITE_API_BASE` (see `.env.example`).
+The API base URL defaults to the live backend and can be overridden with `VITE_API_BASE` (see `.env.example`).
 
 ## Deployment
 
-GitHub Actions builds and publishes to GitHub Pages on every push to `main`
-(`.github/workflows/deploy.yml`). Pages must be set to the "GitHub Actions"
-source (Settings → Pages).
+Every push to `main` builds and publishes to GitHub Pages via `.github/workflows/deploy.yml` (Pages source must be set to "GitHub Actions" in Settings → Pages).
+
+---
+
+*This repo was previously named `minisearch-frontend`. Old links and git remotes redirect automatically.*
