@@ -1,52 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import Logo from "../components/Logo";
-import SearchBar from "../components/SearchBar";
-import SearchTabs from "../components/SearchTabs";
+import SearchHeader from "../components/SearchHeader";
 import AnswerCard from "../components/AnswerCard";
 import Loading from "../components/Loading";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 import { getAnswer, type AnswerResponse } from "../services/answerApi";
-import { ApiError } from "../services/api";
+import { useQueryResource } from "../hooks/useQueryResource";
 import { useSearchHistory } from "../hooks/useSearchHistory";
 
 export default function Answers() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const [input, setInput] = useState(q);
-  const [data, setData] = useState<AnswerResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
-  const { add: addToHistory } = useSearchHistory();
 
   useEffect(() => setInput(q), [q]);
 
+  const { add: addToHistory } = useSearchHistory();
+
+  const fetcher = useCallback(() => getAnswer(q), [q]);
+  const { data, loading, error, retry } = useQueryResource<AnswerResponse>(
+    q !== "",
+    fetcher
+  );
+
+  // Remember answered queries on this device.
   useEffect(() => {
-    if (!q) {
-      setData(null);
-      return;
-    }
-    let alive = true;
-    setLoading(true);
-    setError(null);
-    getAnswer(q)
-      .then((res) => {
-        if (!alive) return;
-        setData(res);
-        addToHistory(q);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        setError(err instanceof ApiError ? err.message : "Unexpected error.");
-        setData(null);
-      })
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [q, nonce, addToHistory]);
+    if (data && data.ok && data.answer) addToHistory(q);
+  }, [data, q, addToHistory]);
 
   const submit = useCallback(
     (query: string) => setParams({ q: query }),
@@ -55,21 +36,14 @@ export default function Answers() {
 
   return (
     <div>
-      <header className="page-header">
-        <div className="page-header-inner">
-          <div className="page-header-row">
-            <Logo size="sm" linked />
-            <SearchBar
-              value={input}
-              onChange={setInput}
-              onSubmit={submit}
-              size="sm"
-              placeholder="Ask a question..."
-            />
-          </div>
-          <SearchTabs q={q} active="answers" />
-        </div>
-      </header>
+      <SearchHeader
+        q={q}
+        input={input}
+        onInput={setInput}
+        onSubmit={submit}
+        active="answers"
+        placeholder="Ask a question..."
+      />
 
       <div className="container">
         {!q && (
@@ -80,7 +54,7 @@ export default function Answers() {
         )}
         {q && loading && <Loading label="Finding an answer..." />}
         {q && !loading && error && (
-          <ErrorState message={error} onRetry={() => setNonce((n) => n + 1)} />
+          <ErrorState message={error} onRetry={retry} />
         )}
         {q && !loading && !error && data && data.ok && data.answer && (
           <AnswerCard data={data} />
