@@ -26,36 +26,6 @@ export function HomeIcon({ size = 22 }: IconProps) {
   );
 }
 
-export function ImageIcon({ size = 22 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3.5" y="5" width="17" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="9" cy="10" r="1.6" fill="currentColor" />
-      <path
-        d="M5.5 17l4.2-4.2a1.5 1.5 0 0 1 2.1 0L16.5 17"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <path d="M14.5 14.5l1.6-1.6a1.5 1.5 0 0 1 2.1 0l2 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export function VideoIcon({ size = 22 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="3" y="6" width="13" height="12" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M16 10.5l4.2-2.4v7.8L16 13.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 export function SparkIcon({ size = 22 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -110,16 +80,6 @@ export function PlayIcon({ size = 20 }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path d="M9 7.5v9l7.5-4.5-7.5-4.5z" fill="#0a0a0c" />
-    </svg>
-  );
-}
-
-export function KebabIcon({ size = 20 }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="5" r="1.8" fill="currentColor" />
-      <circle cx="12" cy="12" r="1.8" fill="currentColor" />
-      <circle cx="12" cy="19" r="1.8" fill="currentColor" />
     </svg>
   );
 }
