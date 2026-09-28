@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { EntityCard, MonthlyNormal } from "../services/knowledgeApi";
 import { cleanSnippetText } from "../utils/sanitize";
 import MapBlock from "./MapBlock";
-import { ChevronDownIcon, KebabIcon, PlaneIcon, ShareIcon } from "./icons";
+import { ChevronDownIcon, PlaneIcon, ShareIcon } from "./icons";
 
 /* ---------- fact key labels + formatting ---------- */
 
@@ -69,25 +69,27 @@ function WeatherStrip({ monthly }: { monthly: MonthlyNormal[] }) {
   if (!monthly.length) return null;
   const tmax = monthly.map((m) => m.tmax ?? 0);
   const tmin = monthly.map((m) => m.tmin ?? 0);
-  const hi = Math.max(...tmax, ...tmin);
-  const lo = Math.min(...tmax, ...tmin, 0);
+  const hi = Math.max(...tmax);
+  const lo = Math.min(...tmin, 0);
   const span = Math.max(1, hi - lo);
   return (
     <div className="weather" aria-label="Monthly weather averages">
       <div className="weather-title">Weather averages</div>
       <div className="weather-months">
-        {monthly.map((m) => (
-          <div key={m.month} className="weather-month" title={`${m.month}: ${m.tmax ?? "–"}° / ${m.tmin ?? "–"}°, ${m.prcp ?? 0} mm rain`}>
+        {monthly.map((m) => {
+          const max = m.tmax ?? 0;
+          const height = Math.round(((max - lo) / span) * 100);
+          return (
             <div
-              className="weather-bar"
-              style={{
-                top: `${Math.round(((hi - (m.tmax ?? 0)) / span) * 100)}%`,
-                height: `${Math.max(6, Math.round((((m.tmax ?? 0) - (m.tmin ?? 0)) / span) * 100))}%`,
-              }}
-            />
-            <span className="weather-label">{m.month[0]}</span>
-          </div>
-        ))}
+              key={m.month}
+              className="weather-month"
+              title={`${m.month}: ${m.tmax ?? "–"}° / ${m.tmin ?? "–"}°, ${m.prcp ?? 0} mm rain`}
+            >
+              <span className="weather-bar" style={{ height: `${Math.max(8, height)}%` }} />
+              <span className="weather-label">{m.month[0]}</span>
+            </div>
+          );
+        })}
       </div>
       <div className="weather-note">
         Monthly averages — {lo.toFixed(0)}° to {hi.toFixed(0)}° C
@@ -211,6 +213,11 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
     else if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {});
   }
 
+  const coords =
+    place && typeof place.lat === "number" && typeof place.lon === "number"
+      ? { lat: place.lat, lon: place.lon }
+      : null;
+
   return (
     <section className="entity-card" aria-label="Knowledge card">
       <header className="entity-head">
@@ -221,9 +228,6 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
           <h2 className="entity-title">{data.title}</h2>
           <p className="entity-subtitle">{data.subtitle}</p>
         </div>
-        <button type="button" className="entity-icon-btn" aria-label="More options" title="More options">
-          <KebabIcon size={20} />
-        </button>
         <button type="button" className="entity-icon-btn" aria-label="Share" title="Share" onClick={share}>
           <ShareIcon size={20} />
         </button>
@@ -254,14 +258,12 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
         ))}
       </div>
 
-      {place && typeof place.lat === "number" && typeof place.lon === "number" && (
-        <MapBlock lat={place.lat} lon={place.lon} label={data.title}
+      {coords && (
+        <MapBlock lat={coords.lat} lon={coords.lon} label={data.title}
                   expanded={mapOpen} onToggle={() => setMapOpen((o) => !o)} />
       )}
 
-      {place && typeof place.lat === "number" && typeof place.lon === "number" && (
-        <GetThere lat={place.lat} lon={place.lon} />
-      )}
+      {coords && <GetThere lat={coords.lat} lon={coords.lon} />}
 
       {place?.weather?.monthly?.length ? (
         <WeatherStrip monthly={place.weather.monthly} />
@@ -276,7 +278,7 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
             aria-expanded={overviewOpen}
           >
             <span className="entity-section-title">Overview</span>
-            <span className={`entity-chevron${overviewOpen ? " open" : ""}`}><ChevronDownIcon size={18} /></span>
+            <span className={`entity-chevron${overviewOpen ? " open" : ""}"><ChevronDownIcon size={18} /></span>
           </button>
           {overviewOpen && (
             <div className="entity-section-body">
@@ -293,20 +295,15 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
 
       {facts.length > 0 && (
         <section className="entity-section">
-          <div className="entity-section-head">
-            <button
-              type="button"
-              className="entity-section-toggle"
-              onClick={() => setFactsOpen((o) => !o)}
-              aria-expanded={factsOpen}
-            >
-              <span className="entity-section-title">Quick facts</span>
-              <span className={`entity-chevron${factsOpen ? " open" : ""}`}><ChevronDownIcon size={18} /></span>
-            </button>
-            <button type="button" className="entity-icon-btn entity-icon-btn-sm" aria-label="More options" title="More options">
-              <KebabIcon size={16} />
-            </button>
-          </div>
+          <button
+            type="button"
+            className="entity-section-toggle"
+            onClick={() => setFactsOpen((o) => !o)}
+            aria-expanded={factsOpen}
+          >
+            <span className="entity-section-title">Quick facts</span>
+            <span className={`entity-chevron${factsOpen ? " open" : ""}"><ChevronDownIcon size={18} /></span>
+          </button>
           {factsOpen && (
             <dl className="entity-facts">
               {facts.map(([k, v]) => (
