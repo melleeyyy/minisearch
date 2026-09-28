@@ -1,18 +1,9 @@
 import { useState } from "react";
 import type { NewsCluster } from "../services/knowledgeApi";
 import { cleanSnippetText, stripHtml } from "../utils/sanitize";
+import { timeAgo } from "../utils/format";
 
-function timeAgo(iso: string): string {
-  if (!iso) return "";
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "";
-  const h = ms / 3_600_000;
-  if (h < 1) return "just now";
-  if (h < 24) return `${Math.round(h)} h ago`;
-  return `${Math.round(h / 24)} d ago`;
-}
-
-/** V3.8 — one clustered news story with corroboration badge. */
+/** One clustered news story with corroboration badge. */
 export default function NewsCard({ cluster }: { cluster: NewsCluster }) {
   const [open, setOpen] = useState(false);
   const [top, ...rest] = cluster.items;
