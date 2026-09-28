@@ -8,18 +8,30 @@ interface MapBlockProps {
   onToggle?: () => void;
 }
 
+interface LeafletMap {
+  remove: () => void;
+}
+
+interface LeafletStatic {
+  map: (el: HTMLElement, opts: Record<string, boolean>) => LeafletMap & {
+    setView: (coords: [number, number], zoom: number) => LeafletMap & { setView: LeafletMap & { setView: unknown } };
+  };
+  tileLayer: (url: string, opts: Record<string, unknown>) => { addTo: (m: unknown) => void };
+  marker: (coords: [number, number]) => { addTo: (m: unknown) => { bindPopup: (l: string) => void } };
+}
+
 /**
- * V3.9 — expandable Leaflet/OSM map block. Leaflet loads from CDN
- * (index.html); when it is unavailable (offline PWA), the block falls
- * back to a plain OSM link instead of breaking the card.
+ * Expandable Leaflet/OSM map block. Leaflet loads from CDN (index.html);
+ * when it is unavailable (offline PWA), the block falls back to a plain
+ * OSM link instead of breaking the card.
  */
 export default function MapBlock({ lat, lon, label, expanded = false, onToggle }: MapBlockProps) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<{ remove: () => void } | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
 
   useEffect(() => {
     if (!expanded || !ref.current) return;
-    const L = (window as unknown as { L?: any }).L;
+    const L = (window as unknown as { L?: LeafletStatic }).L;
     if (!L) return;
     const map = L.map(ref.current, {
       zoomControl: true,
