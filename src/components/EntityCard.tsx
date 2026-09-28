@@ -82,7 +82,6 @@ function WeatherStrip({ monthly }: { monthly: MonthlyNormal[] }) {
           return (
             <div
               key={m.month}
-              className="weather-month"
               title={`${m.month}: ${m.tmax ?? "–"}° / ${m.tmin ?? "–"}°, ${m.prcp ?? 0} mm rain`}
             >
               <span className="weather-bar" style={{ height: `${Math.max(8, height)}%` }} />
@@ -278,7 +277,7 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
             aria-expanded={overviewOpen}
           >
             <span className="entity-section-title">Overview</span>
-            <span className={`entity-chevron${overviewOpen ? " open" : ""}"><ChevronDownIcon size={18} /></span>
+            <span className={overviewOpen ? "entity-chevron open" : "entity-chevron"}><ChevronDownIcon size={18} /></span>
           </button>
           {overviewOpen && (
             <div className="entity-section-body">
@@ -302,7 +301,7 @@ export default function EntityCardView({ data }: EntityCardViewProps) {
             aria-expanded={factsOpen}
           >
             <span className="entity-section-title">Quick facts</span>
-            <span className={`entity-chevron${factsOpen ? " open" : ""}"><ChevronDownIcon size={18} /></span>
+            <span className={factsOpen ? "entity-chevron open" : "entity-chevron"}><ChevronDownIcon size={18} /></span>
           </button>
           {factsOpen && (
             <dl className="entity-facts">
