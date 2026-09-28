@@ -1,12 +1,14 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Logo from "../components/Logo";
 import SearchBar from "../components/SearchBar";
 
 export default function Home() {
   const [q, setQ] = useState("");
+  const navigate = useNavigate();
 
   function submit(query: string) {
-    window.location.hash = `#/search?q=${encodeURIComponent(query)}`;
+    navigate(`/search?q=${encodeURIComponent(query)}`);
   }
 
   return (
