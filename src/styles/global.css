@@ -113,6 +113,8 @@ button { font-family: inherit; }
   border-color: var(--border-strong);
   background: var(--surface-3);
 }
+/* The pill itself shows the focus state — no outline inside it. */
+.searchbar-box :focus-visible { outline: none; }
 
 .searchbar-input {
   flex: 1;
