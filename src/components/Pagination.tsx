@@ -5,33 +5,24 @@ interface PaginationProps {
   label?: string;
 }
 
-/** Simple prev / "page x of y" / next pager for media result pages. */
+/** A single "More search" button that loads the next page of results. */
 export default function Pagination({
   page,
   totalPages,
   onPage,
-  label = "Pages",
+  label = "results",
 }: PaginationProps) {
-  if (totalPages <= 1) return null;
+  if (totalPages <= 1 || page >= totalPages) return null;
   return (
-    <nav className="pagination" aria-label={label}>
+    <div className="more-search">
       <button
-        className="page-btn"
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-      >
-        ‹ Prev
-      </button>
-      <span className="page-btn current">
-        {page} / {totalPages}
-      </span>
-      <button
-        className="page-btn"
-        disabled={page >= totalPages}
+        type="button"
+        className="more-search-btn"
         onClick={() => onPage(page + 1)}
+        aria-label={`Load more ${label}`}
       >
-        Next ›
+        More search
       </button>
-    </nav>
+    </div>
   );
 }

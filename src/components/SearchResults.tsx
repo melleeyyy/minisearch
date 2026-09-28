@@ -8,15 +8,6 @@ interface SearchResultsProps {
   onPage: (page: number) => void;
 }
 
-function pageList(current: number, total: number, limit: number): number[] {
-  const last = Math.max(1, Math.ceil(total / limit));
-  const start = Math.max(1, Math.min(current - 2, last - 4));
-  const end = Math.min(last, start + 4);
-  const out: number[] = [];
-  for (let p = start; p <= end; p++) out.push(p);
-  return out;
-}
-
 export default function SearchResults({ data, onPage }: SearchResultsProps) {
   const { results, total, page, limit, did_you_mean: dym, query } = data;
 
@@ -45,32 +36,16 @@ export default function SearchResults({ data, onPage }: SearchResultsProps) {
         ))}
       </div>
 
-      {total > limit && (
-        <nav className="pagination" aria-label="Search result pages">
+      {page * limit < total && (
+        <div className="more-search">
           <button
-            className="page-btn"
-            disabled={page <= 1}
-            onClick={() => onPage(page - 1)}
-          >
-            ‹ Prev
-          </button>
-          {pageList(page, total, limit).map((p) => (
-            <button
-              key={p}
-              className={`page-btn${p === page ? " current" : ""}`}
-              onClick={() => onPage(p)}
-            >
-              {p}
-            </button>
-          ))}
-          <button
-            className="page-btn"
-            disabled={page * limit >= total}
+            type="button"
+            className="more-search-btn"
             onClick={() => onPage(page + 1)}
           >
-            Next ›
+            More search
           </button>
-        </nav>
+        </div>
       )}
     </div>
   );

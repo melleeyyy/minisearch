@@ -6,15 +6,37 @@ import Loading from "../components/Loading";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 import { getNews, type NewsResponse } from "../services/knowledgeApi";
+import { searchImages, type ImageResponse } from "../services/imageApi";
 import { useQueryResource } from "../hooks/useQueryResource";
 
-/** News tab: clustered, deduplicated news for a query. */
+/** News tab: clustered, deduplicated news for a query, with a topical
+ *  thumbnail from MiniSearch's image index on each story card. */
 export default function News() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const [input, setInput] = useState(q);
+  const [images, setImages] = useState<ImageResponse | null>(null);
 
   useEffect(() => setInput(q), [q]);
+
+  // Topical thumbnails (best-effort — a missing image never blocks news).
+  useEffect(() => {
+    if (!q) {
+      setImages(null);
+      return;
+    }
+    let alive = true;
+    searchImages(q, 1, 12)
+      .then((r) => {
+        if (alive) setImages(r);
+      })
+      .catch(() => {
+        if (alive) setImages(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [q]);
 
   const fetcher = useCallback(() => getNews(q), [q]);
   const { data, loading, error, retry } = useQueryResource<NewsResponse>(
@@ -26,6 +48,10 @@ export default function News() {
     (query: string) => setParams({ q: query, page: "1" }),
     [setParams]
   );
+
+  const thumbs = images?.results ?? [];
+  const thumbFor = (i: number) =>
+    thumbs.length ? thumbs[i % thumbs.length].imageUrl : undefined;
 
   return (
     <div>
@@ -50,8 +76,8 @@ export default function News() {
         )}
         {q && !loading && !error && data && data.clusters.length > 0 && (
           <div className="news-list">
-            {data.clusters.map((c) => (
-              <NewsCard key={c.id} cluster={c} />
+            {data.clusters.map((c, i) => (
+              <NewsCard key={c.id} cluster={c} image={thumbFor(i)} />
             ))}
           </div>
         )}
