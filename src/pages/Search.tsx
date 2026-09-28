@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import Logo from "../components/Logo";
-import SearchBar from "../components/SearchBar";
+import SearchHeader from "../components/SearchHeader";
 import SearchSuggestions from "../components/SearchSuggestions";
-import SearchTabs from "../components/SearchTabs";
 import SearchResults from "../components/SearchResults";
 import EntityCardView from "../components/EntityCard";
 import Loading from "../components/Loading";
@@ -15,7 +13,7 @@ import {
   getPlaceCard,
   type EntityCard,
 } from "../services/knowledgeApi";
-import { ApiError } from "../services/api";
+import { useQueryResource } from "../hooks/useQueryResource";
 import { useSuggestions } from "../hooks/useSuggestions";
 import { useEntityPreview } from "../hooks/useEntityPreview";
 import { useSearchHistory } from "../hooks/useSearchHistory";
@@ -27,51 +25,33 @@ export default function Search() {
 
   const [input, setInput] = useState(q);
   const [focused, setFocused] = useState(false);
-  const [data, setData] = useState<SearchResponse | null>(null);
   const [entity, setEntity] = useState<EntityCard | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
+
+  useEffect(() => setInput(q), [q]);
 
   const suggestions = useSuggestions(input, focused && input.trim().length >= 2);
-  const entityPreview = useEntityPreview(input, focused && input.trim().length >= 3);
+  const entityPreview = useEntityPreview(
+    input,
+    focused && input.trim().length >= 3
+  );
   const { add: addToHistory } = useSearchHistory();
 
-  useEffect(() => {
-    setInput(q);
-  }, [q]);
+  const fetcher = useCallback(
+    () => search(q, page, 10),
+    [q, page]
+  );
+  const { data, loading, error, retry } = useQueryResource<SearchResponse>(
+    q !== "",
+    fetcher
+  );
 
+  // Remember successful first-page searches on this device.
   useEffect(() => {
-    if (!q) {
-      setData(null);
-      return;
-    }
-    let alive = true;
-    setLoading(true);
-    setError(null);
-    search(q, page, 10)
-      .then((res) => {
-        if (!alive) return;
-        setData(res);
-        if (page === 1 && res.results.length > 0) addToHistory(q);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        setError(
-          err instanceof ApiError ? err.message : "Unexpected error. Please retry."
-        );
-        setData(null);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [q, page, nonce, addToHistory]);
+    if (page === 1 && data && data.results.length > 0) addToHistory(q);
+  }, [data, page, q, addToHistory]);
 
-  // V3.8: knowledge card for entity-like queries (place cards carry
-  // weather + flag). Failures degrade silently — web results still show.
+  // Knowledge card for entity-like queries (place cards carry weather +
+  // flag). Failures degrade silently — web results still show.
   useEffect(() => {
     if (!q) return;
     let alive = true;
@@ -113,31 +93,23 @@ export default function Search() {
 
   return (
     <div>
-      <header className="page-header">
-        <div className="page-header-inner">
-          <div className="page-header-row">
-            <Logo size="sm" linked />
-            <div onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}>
-              <SearchBar
-                value={input}
-                onChange={setInput}
-                onSubmit={submit}
-                size="sm"
-              />
-              {focused && (suggestions.length > 0 || entityPreview) && (
-                <SearchSuggestions
-                  suggestions={suggestions}
-                  onPick={submit}
-                  entity={entityPreview}
-                />
-              )}
-            </div>
-          </div>
-          <div>
-            <SearchTabs q={q} active="web" />
-          </div>
-        </div>
-      </header>
+      <SearchHeader
+        q={q}
+        input={input}
+        onInput={setInput}
+        onSubmit={submit}
+        active="web"
+        onSearchFocus={() => setFocused(true)}
+        onSearchBlur={() => setFocused(false)}
+      >
+        {focused && (suggestions.length > 0 || entityPreview) && (
+          <SearchSuggestions
+            suggestions={suggestions}
+            onPick={submit}
+            entity={entityPreview}
+          />
+        )}
+      </SearchHeader>
 
       <div className="container">
         {!q && (
@@ -149,7 +121,7 @@ export default function Search() {
 
         {q && loading && <Loading label="Searching..." />}
         {q && !loading && error && (
-          <ErrorState message={error} onRetry={() => setNonce((n) => n + 1)} />
+          <ErrorState message={error} onRetry={retry} />
         )}
         {q && !loading && !error && data && data.results.length === 0 && (
           <EmptyState
