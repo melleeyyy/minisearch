@@ -1,53 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import Logo from "../components/Logo";
-import SearchBar from "../components/SearchBar";
-import SearchTabs from "../components/SearchTabs";
+import SearchHeader from "../components/SearchHeader";
 import NewsCard from "../components/NewsCard";
 import Loading from "../components/Loading";
 import ErrorState from "../components/ErrorState";
 import EmptyState from "../components/EmptyState";
 import { getNews, type NewsResponse } from "../services/knowledgeApi";
-import { ApiError } from "../services/api";
+import { useQueryResource } from "../hooks/useQueryResource";
 
-/** V3.8 — News tab: clustered, deduplicated news for a query. */
+/** News tab: clustered, deduplicated news for a query. */
 export default function News() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const [input, setInput] = useState(q);
-  const [data, setData] = useState<NewsResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [nonce, setNonce] = useState(0);
 
   useEffect(() => setInput(q), [q]);
 
-  useEffect(() => {
-    if (!q) {
-      setData(null);
-      return;
-    }
-    let alive = true;
-    setLoading(true);
-    setError(null);
-    getNews(q)
-      .then((res) => {
-        if (alive) setData(res);
-      })
-      .catch((err: unknown) => {
-        if (!alive) return;
-        setError(
-          err instanceof ApiError ? err.message : "Unexpected error. Please retry."
-        );
-        setData(null);
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [q, nonce]);
+  const fetcher = useCallback(() => getNews(q), [q]);
+  const { data, loading, error, retry } = useQueryResource<NewsResponse>(
+    q !== "",
+    fetcher
+  );
 
   const submit = useCallback(
     (query: string) => setParams({ q: query, page: "1" }),
@@ -56,15 +29,7 @@ export default function News() {
 
   return (
     <div>
-      <header className="page-header">
-        <div className="page-header-inner">
-          <div className="page-header-row">
-            <Logo size="sm" linked />
-            <SearchBar value={input} onChange={setInput} onSubmit={submit} size="sm" />
-          </div>
-          <SearchTabs q={q} active="news" />
-        </div>
-      </header>
+      <SearchHeader q={q} input={input} onInput={setInput} onSubmit={submit} active="news" />
 
       <div className="container">
         {!q && (
@@ -75,7 +40,7 @@ export default function News() {
         )}
         {q && loading && <Loading label="Loading news..." />}
         {q && !loading && error && (
-          <ErrorState message={error} onRetry={() => setNonce((n) => n + 1)} />
+          <ErrorState message={error} onRetry={retry} />
         )}
         {q && !loading && !error && data && data.clusters.length === 0 && (
           <EmptyState
