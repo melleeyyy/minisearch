@@ -82,6 +82,7 @@ function WeatherStrip({ monthly }: { monthly: MonthlyNormal[] }) {
           return (
             <div
               key={m.month}
+              className="weather-month"
               title={`${m.month}: ${m.tmax ?? "–"}° / ${m.tmin ?? "–"}°, ${m.prcp ?? 0} mm rain`}
             >
               <span className="weather-bar" style={{ height: `${Math.max(8, height)}%` }} />
