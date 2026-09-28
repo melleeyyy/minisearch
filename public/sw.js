@@ -2,11 +2,11 @@
    Network-first for navigations, cache-first for same-origin static assets.
    API requests (cross-origin) are never intercepted. */
 
-const CACHE = "minisearch-v3";
+const CACHE = "minisearch-v4";
 const SHELL = [
-  "/minisearch-frontend/",
-  "/minisearch-frontend/index.html",
-  "/minisearch-frontend/manifest.webmanifest",
+  "/minisearch/",
+  "/minisearch/index.html",
+  "/minisearch/manifest.webmanifest",
 ];
 
 self.addEventListener("install", (event) => {
@@ -46,7 +46,7 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() =>
           caches
-            .match("/minisearch-frontend/index.html")
+            .match("/minisearch/index.html")
             .then((hit) => hit || Response.error())
         )
     );
