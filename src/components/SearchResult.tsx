@@ -1,7 +1,6 @@
 import type { SearchResultItem } from "../services/searchApi";
 import { timeAgo } from "../utils/format";
 import { cleanSnippetHtml } from "../utils/sanitize";
-import { KebabIcon } from "./icons";
 
 /** URL path without scheme/domain — shown as a readable one-line breadcrumb. */
 function urlPath(displayUrl: string): string {
@@ -48,9 +47,6 @@ export default function SearchResult({ item }: { item: SearchResultItem }) {
             {urlPath(item.displayUrl)}
           </span>
         </div>
-        <button type="button" className="result-kebab" aria-label="More options" title="More options">
-          <KebabIcon size={18} />
-        </button>
       </div>
       <h3 className="result-title">
         <a href={item.url} target="_blank" rel="noopener noreferrer">
