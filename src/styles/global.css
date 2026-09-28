@@ -112,7 +112,6 @@ button { font-family: inherit; }
 .searchbar-box:focus-within {
   border-color: var(--border-strong);
   background: var(--surface-3);
-  box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.14);
 }
 
 .searchbar-input {
@@ -356,16 +355,23 @@ button { font-family: inherit; }
   white-space: nowrap;
 }
 
-/* ---------- pagination ---------- */
+/* ---------- pagination ("More search") ---------- */
 
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 26px 0 40px;
-  flex-wrap: wrap;
+.more-search { display: flex; justify-content: center; padding: 28px 0 44px; }
+.more-search-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 230px;
+  padding: 12px 28px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--link);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
 }
+.more-search-btn:hover { background: var(--surface-3); border-color: var(--accent); }
+
 .page-btn {
   min-width: 38px;
   height: 38px;
@@ -406,7 +412,7 @@ button { font-family: inherit; }
   margin-bottom: 12px;
 }
 .answer-text { font-size: 17px; line-height: 1.65; margin: 0 0 14px; }
-.answer-source { font-size: 13.5px; color: var(--text-dim); }
+.answer-source { font-size: 13.5px; color: var(--text-dim); overflow-wrap: anywhere; }
 .answer-conflict {
   background: var(--warn-bg);
   border: 1px solid var(--warn-border);
@@ -432,8 +438,8 @@ button { font-family: inherit; }
   padding: 12px 0;
   border-top: 1px solid var(--border);
 }
-.citation-title { font-size: 15px; font-weight: 600; color: var(--text); }
-.citation-domain { color: var(--tag-text); font-size: 12.5px; margin: 0 0 4px; }
+.citation-title { font-size: 15px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.citation-domain { color: var(--tag-text); font-size: 12.5px; margin: 0 0 4px; overflow-wrap: anywhere; }
 .citation-snippet { color: var(--text-dim); font-size: 13.5px; margin: 4px 0 0; }
 .citation-checked { color: var(--text-faint); font-size: 12px; margin: 2px 0 0; }
 
@@ -887,7 +893,15 @@ button { font-family: inherit; }
 .news-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 16px;
+  display: flex; gap: 14px; align-items: flex-start;
 }
+.news-card-main { flex: 1; min-width: 0; }
+.news-card-thumb {
+  width: 104px; height: 78px; object-fit: cover;
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  flex: none; background: var(--surface-2);
+}
+@media (max-width: 420px) { .news-card-thumb { width: 88px; height: 64px; } }
 .news-card-badges { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
 .news-badge {
   background: var(--tag-bg); color: var(--tag-text); font-size: 12px;
@@ -938,8 +952,8 @@ button { font-family: inherit; }
   display: flex; justify-content: space-between; gap: 10px;
   padding: 7px 0; border-top: 1px solid var(--border); font-size: 13px;
 }
-.evidence-domain { color: var(--tag-text); }
-.evidence-date { color: var(--text-faint); }
+.evidence-domain { color: var(--tag-text); overflow-wrap: anywhere; min-width: 0; }
+.evidence-date { color: var(--text-faint); flex-shrink: 0; }
 
 /* ---------- accessibility polish ---------- */
 
